@@ -1,0 +1,575 @@
+.reference-catalog-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  width: min(1160px, calc(100vw - 110px));
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) 220px;
+  gap: 0;
+  padding: 18px 12px;
+  background: linear-gradient(120deg, #f6f8f9, #fff);
+  border: 1px solid #dce3e7;
+  border-top: 3px solid #e06518;
+  box-shadow: 0 20px 45px #25313c24;
+  border-radius: 0 0 15px 15px;
+  color: #47515b;
+  z-index: 55;
+  max-height: calc(100dvh - 170px);
+  overflow: auto;
+  align-items: start;
+}
+.reference-catalog-menu > section {
+  padding: 3px 13px;
+  position: relative;
+  min-width: 0;
+}
+.reference-catalog-menu > section + section {
+  border-right: 1px solid #e5e9ec;
+}
+.reference-catalog-menu h3,
+.reference-catalog-mobile h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  line-height: 1.9;
+  font-weight: 800;
+  color: #35404a;
+  border-bottom: 1px solid #e2e7ea;
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+}
+.reference-catalog-menu h3 svg {
+  color: #7c878e;
+  flex-shrink: 0;
+}
+.reference-category-art {
+  float: left;
+  width: 70px;
+  height: 85px;
+  object-fit: contain;
+  mix-blend-mode: multiply;
+  margin: 0 5px 7px 0;
+}
+.reference-category-links a {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 0;
+  color: #5e6870;
+  font-size: 11px;
+  line-height: 1.8;
+}
+.reference-category-links a > svg {
+  color: #c56a31;
+  opacity: 0;
+}
+.reference-category-links a:hover {
+  color: #c36024;
+}
+.reference-category-links a:hover > svg {
+  opacity: 1;
+}
+.reference-belts {
+  position: relative;
+}
+.reference-belts > summary {
+  font-size: 11px;
+  line-height: 1.9;
+  padding: 7px 0;
+  cursor: pointer;
+  font-weight: 700;
+  color: #48535c;
+}
+.reference-belts[open] {
+  clear: both;
+}
+.reference-belts > ul {
+  padding: 6px 0;
+}
+.reference-belts > ul > li {
+  border-bottom: 1px solid #edf0f2;
+}
+.reference-belts ul details {
+  border: 0 !important;
+  background: transparent !important;
+}
+.reference-belts ul summary {
+  padding: 6px !important;
+  font-size: 11px !important;
+  line-height: 1.8 !important;
+}
+.reference-belts ul a {
+  font-size: 10px !important;
+  padding: 5px 8px !important;
+}
+.reference-view-all {
+  clear: both;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #dc6b22 !important;
+  font-size: 10px;
+  padding: 13px 0 2px;
+}
+.reference-menu-promo {
+  position: relative;
+  min-height: 220px;
+  background: linear-gradient(130deg, #e4ebef, #f6f8fa);
+  border: 1px solid #dde5ea;
+  overflow: hidden;
+  border-radius: 10px;
+  padding: 18px 15px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-end;
+}
+.reference-menu-promo > img {
+  position: absolute;
+  left: -20px;
+  top: 2px;
+  width: 160px;
+  height: 140px;
+  object-fit: contain;
+  opacity: 0.7;
+  mix-blend-mode: multiply;
+}
+.reference-menu-promo > span,
+.reference-menu-promo > strong,
+.reference-menu-promo > a {
+  position: relative;
+  z-index: 1;
+}
+.reference-menu-promo > span {
+  font-size: 9px;
+  color: #677d8b;
+}
+.reference-menu-promo > strong {
+  font-size: 17px;
+  line-height: 1.75;
+  font-weight: 850;
+  color: #2f414e;
+  margin: 5px 0 11px;
+}
+.reference-menu-promo > a {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #e06518;
+  color: white;
+  border-radius: 7px;
+  padding: 10px 12px;
+  font-size: 10px;
+  min-height: 40px;
+  box-shadow: 0 8px 20px -10px #d06020;
+}
+.reference-catalog-mobile {
+  display: grid;
+  gap: 16px;
+}
+.reference-catalog-mobile > section {
+  padding: 14px;
+  border: 1px solid #dde5ea;
+  border-radius: 12px;
+  background: linear-gradient(130deg, #f2f5f7, #fff);
+}
+.reference-catalog-mobile .reference-category-links a,
+.reference-catalog-mobile .reference-belts > summary {
+  min-height: 42px;
+  font-size: 12px;
+}
+.reference-catalog-mobile .reference-belts ul a {
+  min-height: 38px;
+}
+.reference-catalog-mobile .reference-view-all {
+  min-height: 40px;
+  font-size: 11px;
+}
+@media (max-width: 1150px) {
+  .reference-catalog-menu {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    padding: 14px 8px;
+  }
+  .reference-menu-promo {
+    display: none;
+  }
+  .reference-catalog-menu > section {
+    padding-inline: 10px;
+  }
+  .reference-category-art {
+    width: 50px;
+    height: 70px;
+  }
+  .reference-catalog-menu h3 {
+    font-size: 11px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .reference-catalog-menu * {
+    scroll-behavior: auto !important;
+  }
+}
+@media(min-width:1024px){.reference-catalog-menu{position:fixed;top:138px;right:max(20px,calc((100vw - 1280px)/2));width:min(1180px,calc(100vw - 40px))}}
+@media(min-width:1024px) and (max-width:1279px){.header-support-status{display:none}}
+@media(min-width:1024px){.reference-catalog-menu{overflow:visible}.reference-catalog-menu .reference-belts[open]{clear:none}.reference-catalog-menu .reference-belts>ul{position:absolute;top:0;right:calc(100% + 12px);width:300px;max-height:calc(100dvh - 200px);overflow:auto;padding:14px;background:#fff;border:1px solid #dce4e9;border-top:2px solid #e06518;border-radius:10px;box-shadow:0 15px 40px #283a4a25;z-index:3}.reference-catalog-menu .reference-belts>ul>li:last-child{border:0}}
+
+
+/* Production refinement: consistent RTL taxonomy, usable focus states and browser-safe sizing. */
+.reference-catalog-menu {
+  direction: rtl;
+  box-sizing: border-box;
+  width: min(1180px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  max-height: min(72vh, 720px);
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  border-radius: 0 0 16px 16px;
+  background: #fff;
+}
+.reference-catalog-menu *,
+.reference-catalog-mobile * { box-sizing: border-box; }
+.reference-catalog-menu > section { min-width: 0; }
+.reference-catalog-menu h3 { min-height: 42px; font-size: 12px; }
+.reference-catalog-menu .reference-category-links a,
+.reference-catalog-menu .reference-belts > summary {
+  border-radius: 7px;
+  padding: 8px 9px;
+  min-height: 38px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+  transition: color .16s ease, background-color .16s ease;
+}
+.reference-catalog-menu .reference-category-links a:hover,
+.reference-catalog-menu .reference-belts > summary:hover {
+  background: #fff4ec;
+}
+.reference-catalog-menu a:focus-visible,
+.reference-catalog-menu summary:focus-visible,
+.reference-catalog-mobile a:focus-visible,
+.reference-catalog-mobile summary:focus-visible {
+  outline: 3px solid #e06518;
+  outline-offset: 2px;
+}
+.reference-catalog-menu .reference-belts > summary { list-style-position: inside; }
+.reference-catalog-menu .reference-belts > summary::marker { color: #e06518; }
+.reference-catalog-menu .reference-belts[open] > summary { color: #ba4b0b; background: #fff4ec; }
+.reference-catalog-menu .reference-belts > ul {
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.reference-catalog-menu .reference-view-all {
+  min-height: 42px;
+  border-radius: 7px;
+  padding-inline: 8px;
+}
+.reference-menu-promo {
+  background: linear-gradient(145deg, #f2f5f6 0%, #fff8f2 100%);
+  border-color: #e7e1dc;
+}
+.reference-menu-promo > a { min-height: 44px; font-weight: 800; }
+@media (min-width: 1280px) {
+  .reference-catalog-menu {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) 210px;
+    gap: 2px;
+    padding: 20px 14px;
+    top: 138px;
+  }
+  .reference-catalog-menu > section { padding-inline: 12px; }
+}
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .reference-catalog-menu {
+    top: 132px;
+    right: 16px;
+    width: calc(100vw - 32px);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    padding: 16px 8px;
+  }
+  .reference-catalog-menu .reference-menu-promo { display: none; }
+  .reference-catalog-menu > section { padding-inline: 8px; }
+  .reference-catalog-menu h3 { font-size: 11px; }
+  .reference-catalog-menu .reference-belts > ul { width: min(280px, calc(100vw - 48px)); }
+}
+@media (max-width: 1023px) {
+  .reference-catalog-menu { display: none; }
+}
+@media (hover: none) {
+  .reference-catalog-menu .reference-category-links a > svg { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .reference-catalog-menu *,
+  .reference-catalog-mobile * { transition: none !important; animation: none !important; }
+}
+
+
+/* Keep expanded subgroups inside the menu scroll area; avoids clipping differences between browsers. */
+@media (min-width: 1024px) {
+  .reference-catalog-menu {
+    overflow-x: hidden;
+    overflow-y: auto;
+    max-height: calc(100vh - 158px);
+    max-height: calc(100dvh - 158px);
+    overscroll-behavior: contain;
+  }
+  .reference-catalog-menu .reference-belts > ul {
+    position: static;
+    inset: auto;
+    width: auto;
+    max-height: none;
+    overflow: visible;
+    margin: 2px 8px 8px 0;
+    padding: 5px 8px 5px 0;
+    border: 0;
+    border-right: 2px solid #f1c7a9;
+    border-radius: 0;
+    box-shadow: none;
+    background: #fffaf6;
+  }
+  .reference-catalog-menu .reference-belts > ul > li {
+    border-bottom: 1px solid #f1e8e2;
+  }
+  .reference-catalog-menu .reference-belts > ul > li:last-child { border-bottom: 0; }
+  .reference-catalog-menu .reference-belts ul details { margin-block: 2px; }
+}
+
+
+/* 2026 desktop mega-menu: category rail + real taxonomy links + searchable main panel. */
+.reference-catalog-menu {
+  position: fixed !important;
+  top: 128px;
+  right: max(20px, calc((100vw - 1280px) / 2)) !important;
+  width: min(1220px, calc(100vw - 40px)) !important;
+  height: min(570px, calc(100dvh - 158px)) !important;
+  max-height: calc(100dvh - 158px) !important;
+  display: grid !important;
+  grid-template-columns: 278px minmax(0, 1fr) !important;
+  grid-template-rows: auto minmax(0, 1fr) !important;
+  gap: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  direction: rtl;
+  background: #fff !important;
+  border: 1px solid #dfe5e9 !important;
+  border-top: 3px solid #e56b1e !important;
+  border-radius: 0 0 18px 18px !important;
+  box-shadow: 0 24px 65px rgba(25, 38, 50, .22) !important;
+  color: #28333e;
+  z-index: 120 !important;
+  isolation: isolate;
+}
+.reference-menu-header { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 16px 22px; background: linear-gradient(105deg, #fff 0%, #fffaf5 100%); border-bottom: 1px solid #e7ebef; }
+.reference-menu-header-copy { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.reference-menu-header-copy > span, .reference-menu-eyebrow { color: #d65e16; font-size: 10px; font-weight: 900; letter-spacing: .02em; }
+.reference-menu-header-copy > strong { color: #252f38; font-size: 15px; font-weight: 950; }
+.reference-menu-search { width: min(390px, 42%); min-height: 42px; display: flex; align-items: center; gap: 9px; padding: 0 13px; border: 1px solid #e0e5e9; border-radius: 11px; background: #fff; color: #89949e; transition: border-color .18s, box-shadow .18s; }
+.reference-menu-search:focus-within { border-color: #e56b1e; box-shadow: 0 0 0 3px #e56b1e18; }
+.reference-menu-search input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: #29343f; font: inherit; font-size: 12px; }
+.reference-menu-search input::placeholder { color: #9aa3ac; }
+.reference-menu-rail { grid-column: 1; grid-row: 2; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; padding: 14px 12px 12px; border-left: 1px solid #e6eaed; background: #f7f9fb; }
+.reference-menu-rail-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 1px 7px 12px; color: #2b3742; }
+.reference-menu-rail-heading strong { font-size: 13px; font-weight: 950; }
+.reference-menu-rail-heading span { font-size: 10px; color: #8b96a0; }
+.reference-menu-category-list { min-height: 0; flex: 1; display: flex; flex-direction: column; gap: 4px; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; padding: 1px 0 8px; }
+.reference-menu-category { width: 100%; min-height: 51px; display: grid; grid-template-columns: 32px minmax(0, 1fr) 15px; align-items: center; gap: 9px; padding: 7px 8px; border: 1px solid transparent; border-radius: 11px; background: transparent; color: #53606b; text-align: right; transition: background .16s, border-color .16s, color .16s, transform .16s; }
+.reference-menu-category:hover { background: #fff; border-color: #e7ebef; color: #29343f; }
+.reference-menu-category.is-active { background: #fff; border-color: #f0c5a7; color: #c9550d; box-shadow: 0 4px 12px rgba(35, 45, 55, .04); }
+.reference-menu-category-icon { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; background: #edf1f4; color: #75818c; }
+.reference-menu-category.is-active .reference-menu-category-icon { background: #fff0e5; color: #df6418; }
+.reference-menu-category-copy { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.reference-menu-category-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 850; }
+.reference-menu-category-copy small { color: #929ca5; font-size: 9px; font-weight: 600; }
+.reference-menu-category-arrow { color: #a4adb5; }
+.reference-menu-category.is-active .reference-menu-category-arrow { color: #df6418; }
+.reference-menu-all-categories { min-height: 40px; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 8px; border: 1px solid #e5e9ed; border-radius: 10px; background: #fff; color: #bf5313 !important; font-size: 11px; font-weight: 900; }
+.reference-menu-main { grid-column: 2; grid-row: 2; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 14px; padding: 18px 20px 16px; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; background: #fff; }
+.reference-menu-category-hero { flex: 0 0 auto; min-height: 142px; display: grid; grid-template-columns: minmax(0, 1fr) 175px; align-items: center; gap: 16px; padding: 15px 19px; border: 1px solid #e7ebef; border-radius: 15px; background: linear-gradient(110deg, #fff 0%, #fff8f2 100%); overflow: hidden; }
+.reference-menu-category-copy-block { min-width: 0; }
+.reference-menu-category-copy-block h2 { margin-top: 5px; color: #202b35; font-size: 22px; line-height: 1.45; font-weight: 950; }
+.reference-menu-category-copy-block p { max-width: 580px; margin-top: 5px; color: #6c7883; font-size: 11px; line-height: 1.9; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.reference-menu-category-copy-block > a { display: inline-flex; align-items: center; gap: 7px; margin-top: 9px; color: #ce5b15 !important; font-size: 11px; font-weight: 900; }
+.reference-menu-category-hero > img { display: block; width: 100%; height: 112px; object-fit: contain; mix-blend-mode: multiply; }
+.reference-menu-subgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; align-items: stretch; }
+.reference-menu-subgroup { min-width: 0; padding: 12px 12px 10px; border: 1px solid #e7ebef; border-radius: 13px; background: #fff; transition: border-color .16s, box-shadow .16s; }
+.reference-menu-subgroup:hover { border-color: #efc7ad; box-shadow: 0 7px 18px rgba(31, 45, 58, .05); }
+.reference-menu-subgroup-heading { display: flex; align-items: center; justify-content: space-between; gap: 7px; padding-bottom: 8px; border-bottom: 1px solid #edf0f2; }
+.reference-menu-subgroup-heading strong { min-width: 0; color: #303b45; font-size: 11px; line-height: 1.8; font-weight: 950; }
+.reference-menu-subgroup-heading > a { display: grid; place-items: center; flex: 0 0 27px; height: 27px; border-radius: 8px; background: #fff2e8; color: #d45d17 !important; }
+.reference-menu-sub-links { display: flex; flex-direction: column; gap: 3px; padding-top: 7px; }
+.reference-menu-sub-links a { display: flex; align-items: center; justify-content: space-between; gap: 7px; min-height: 30px; padding: 5px 7px; border-radius: 7px; color: #65717b !important; font-size: 10px; line-height: 1.7; transition: background .16s, color .16s; }
+.reference-menu-sub-links a span { min-width: 0; overflow-wrap: anywhere; }
+.reference-menu-sub-links a svg { flex: 0 0 auto; color: #b5bdc4; }
+.reference-menu-sub-links a:hover { background: #fff3ea; color: #c65310 !important; }
+.reference-menu-sub-links a:hover svg { color: #d95f17; }
+.reference-menu-subgroup-single { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 12px; color: #ce5b15 !important; font-size: 11px; font-weight: 850; }
+.reference-menu-more { display: inline-flex; margin-top: 8px; color: #c95712 !important; font-size: 10px; font-weight: 850; }
+.reference-menu-footer { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 14px; border: 1px solid #f0dfd2; border-radius: 12px; background: #fffaf6; }
+.reference-menu-footer > div { display: flex; align-items: center; gap: 9px; min-width: 0; color: #d15b15; }
+.reference-menu-footer > div > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.reference-menu-footer strong { color: #414c56; font-size: 10px; font-weight: 950; }
+.reference-menu-footer small { color: #7c8790; font-size: 9px; line-height: 1.7; }
+.reference-menu-footer > a { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 7px; min-height: 36px; padding: 0 11px; border-radius: 9px; background: #e56b1e; color: #fff !important; font-size: 10px; font-weight: 900; }
+.reference-menu-empty-state { min-height: 210px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; color: #7d8993; font-size: 11px; line-height: 1.8; }
+.reference-menu-empty-state > svg { color: #d56a27; }
+.reference-menu-empty-state strong { color: #34414c; font-size: 13px; }
+.reference-menu-empty-state > a { display: inline-flex; align-items: center; gap: 8px; margin-top: 3px; color: #c65310 !important; font-weight: 900; }
+.reference-menu-no-results { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 28px 10px; color: #8a959e; font-size: 10px; text-align: center; }
+.reference-menu-no-results svg { color: #d56a27; }
+.reference-catalog-menu a:focus-visible, .reference-catalog-menu button:focus-visible, .reference-catalog-menu input:focus-visible { outline: 3px solid #e56b1e; outline-offset: 2px; }
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .reference-catalog-menu { top: 132px !important; right: 16px !important; width: calc(100vw - 32px) !important; grid-template-columns: minmax(0, 1fr) 245px !important; }
+  .reference-menu-subgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .reference-menu-category-hero { grid-template-columns: minmax(0, 1fr) 135px; }
+}
+@media (max-height: 720px) and (min-width: 1024px) {
+  .reference-catalog-menu { height: calc(100dvh - 150px) !important; }
+  .reference-menu-header { padding-block: 10px; }
+  .reference-menu-category-hero { min-height: 112px; padding-block: 10px; }
+  .reference-menu-category-hero > img { height: 86px; }
+  .reference-menu-main { gap: 10px; padding-block: 12px; }
+}
+@media (max-width: 1023px) { .reference-catalog-menu { display: none !important; } }
+@media (prefers-reduced-motion: reduce) { .reference-catalog-menu *, .reference-catalog-mobile * { transition: none !important; animation: none !important; } }
+
+/* Grouped category rail: actual database groups are visible on the right side of the mega menu. */
+.reference-menu-category-group { min-width: 0; padding: 0 0 7px; }
+.reference-menu-category-group + .reference-menu-category-group { margin-top: 4px; padding-top: 8px; border-top: 1px solid #e3e8ec; }
+.reference-menu-group-heading { min-height: 29px; display: flex; align-items: center; gap: 7px; padding: 2px 7px 7px; color: #64717b; }
+.reference-menu-group-icon { display: grid; place-items: center; flex: 0 0 23px; width: 23px; height: 23px; border-radius: 7px; background: #e9edf1; color: #667580; }
+.reference-menu-group-heading strong { min-width: 0; flex: 1; font-size: 10px; line-height: 1.7; font-weight: 950; }
+.reference-menu-group-heading small { flex: 0 0 auto; color: #929da6; font-size: 9px; font-weight: 800; }
+.reference-menu-category-group .reference-menu-category { min-height: 46px; grid-template-columns: 29px minmax(0, 1fr) 14px; padding: 6px 7px; gap: 7px; }
+.reference-menu-category-group .reference-menu-category-icon { width: 29px; height: 29px; }
+.reference-menu-category-group .reference-menu-category-copy strong { font-size: 10px; }
+.reference-menu-category-group .reference-menu-category-copy small { font-size: 8px; }
+@media (min-width: 1024px) { .reference-catalog-menu { margin-top: 0 !important; } }
+
+/* Make the complete category list visibly scrollable instead of looking truncated. */
+.reference-menu-category-list {
+  scrollbar-width: auto;
+  scrollbar-color: #e56b1e #edf1f4;
+  padding-left: 4px;
+}
+.reference-menu-category-list::-webkit-scrollbar { width: 7px; }
+.reference-menu-category-list::-webkit-scrollbar-track { background: #edf1f4; border-radius: 8px; }
+.reference-menu-category-list::-webkit-scrollbar-thumb { background: #e56b1e; border: 2px solid #edf1f4; border-radius: 8px; }
+.reference-menu-category-group { flex: 0 0 auto; }
+
+/* 2026-10-26: enlarged mega menu with independent nested scroll regions. */
+@media (min-width: 1024px) {
+  .reference-catalog-menu {
+    width: min(1470px, calc(100vw - 24px)) !important;
+    right: 12px !important;
+    height: min(730px, calc(100dvh - 146px)) !important;
+    max-height: calc(100dvh - 146px) !important;
+    grid-template-columns: 440px minmax(0, 1fr) !important;
+    overflow: hidden !important;
+  }
+  .reference-menu-rail {
+    min-height: 0 !important;
+    height: 100%;
+    overflow: hidden !important;
+  }
+  .reference-menu-category-list {
+    flex: 1 1 0;
+    min-height: 0 !important;
+    max-height: 100%;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior-y: contain;
+    scrollbar-width: thin;
+    scrollbar-color: #e56b1e #edf1f4;
+    -webkit-overflow-scrolling: touch;
+  }
+  .reference-menu-main {
+    height: 100%;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  .reference-menu-category-hero,
+  .reference-menu-footer { flex: 0 0 auto !important; }
+  .reference-menu-subgrid {
+    min-height: 0;
+    flex: 1 1 auto;
+    align-content: start;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior-y: contain;
+    padding: 2px 6px 10px;
+    scrollbar-width: thin;
+    scrollbar-color: #e56b1e #edf1f4;
+  }
+  .reference-menu-subgrid::-webkit-scrollbar,
+  .reference-menu-category-list::-webkit-scrollbar { width: 8px; }
+  .reference-menu-subgrid::-webkit-scrollbar-thumb,
+  .reference-menu-category-list::-webkit-scrollbar-thumb {
+    background: #e56b1e;
+    border-radius: 10px;
+    border: 2px solid #edf1f4;
+  }
+  .reference-menu-empty-state { overflow-y: auto; min-height: 0; flex: 1 1 auto; }
+}
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .reference-catalog-menu {
+    grid-template-columns: 355px minmax(0, 1fr) !important;
+    width: calc(100vw - 24px) !important;
+    right: 12px !important;
+  }
+}
+@media (min-width: 1024px) and (max-height: 660px) {
+  .reference-catalog-menu { height: calc(100dvh - 140px) !important; }
+  .reference-menu-category-hero { min-height: 100px; }
+}
+
+/* Wider category rail and more readable entries, retaining independent scrolling. */
+@media (min-width: 1024px) {
+  .reference-menu-category-group .reference-menu-category { grid-template-columns: 34px minmax(0, 1fr) 16px; gap: 10px; padding-inline: 10px; }
+  .reference-menu-category-group .reference-menu-category-icon { width: 34px; height: 34px; }
+  .reference-menu-category-group .reference-menu-category-copy strong { font-size: 12px; }
+  .reference-menu-category-group .reference-menu-category-copy small { font-size: 10px; }
+  .reference-menu-group-heading strong { font-size: 12px; }
+}
+
+/* Use each category's registered catalog image in the right-side mega-menu rail. */
+@media (min-width: 1024px) {
+  .reference-menu-category-group .reference-menu-category {
+    grid-template-columns: 48px minmax(0, 1fr) 16px;
+    gap: 11px;
+    min-height: 64px;
+  }
+  .reference-menu-category-thumb {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
+    overflow: hidden;
+    border: 1px solid #e0e5e9;
+    border-radius: 11px;
+    background: #fff8f2;
+    color: #e06518;
+  }
+  .reference-menu-category-thumb img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    padding: 4px;
+  }
+  .reference-menu-category.is-active .reference-menu-category-thumb {
+    border-color: #e56b1e;
+    box-shadow: 0 0 0 2px rgb(229 107 30 / 12%);
+  }
+}
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .reference-menu-category-group .reference-menu-category {
+    grid-template-columns: 42px minmax(0, 1fr) 15px;
+  }
+  .reference-menu-category-thumb {
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+  }
+}

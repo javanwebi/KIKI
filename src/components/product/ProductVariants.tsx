@@ -1,0 +1,356 @@
+import React, { useEffect, useMemo, useState } from "react";
+import type { ProductVariant, ProductGalleryImage } from "../../types";
+import { normalizeCatalogueText } from "../../data/userProducts";
+import { toPersianDigits } from "../../utils/formatters";
+import { ProductImage } from "./ProductImage";
+import { Modal } from "../ui/Modal";
+import { Check, Image as ImageIcon } from "lucide-react";
+import { getBeltSkuMedia, isExcludedBeltSku } from "../../utils/beltCatalogMedia";
+
+export interface ProductVariantsProps {
+  variants: ProductVariant[];
+  selected: string;
+  onSelect: (code: string) => void;
+  showPrices?: boolean;
+  galleryImages?: ProductGalleryImage[];
+  familyCode?: string;
+}
+
+export const ProductVariants: React.FC<ProductVariantsProps> = ({
+  variants,
+  selected,
+  onSelect,
+  galleryImages = [],
+  showPrices = false,
+  familyCode,
+}) => {
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [imagePreview, setImagePreview] = useState<{
+    code: string;
+    name: string;
+    src: string | null;
+    secondarySrc?: string | null;
+    realImageStatus?: 'EXACT_SKU_IMAGE_FOUND' | 'REAL_IMAGE_NOT_FOUND';
+    familyReference: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!imagePreview) return;
+    document.body.classList.add("sanat-product-image-preview-open");
+    return () => document.body.classList.remove("sanat-product-image-preview-open");
+  }, [imagePreview]);
+
+  const results = useMemo(
+    () =>
+      variants.filter((v) =>
+        normalizeCatalogueText(
+          `${v.code} ${v.size} ${v.name} ${v.model || ""} ${v.brand || ""}`,
+        ).includes(normalizeCatalogueText(query)),
+      ),
+    [variants, query],
+  );
+
+  const totalPages = Math.max(1, Math.ceil(results.length / 20));
+
+  const getVariantLinkedImages = (variant: ProductVariant): string[] => {
+    const urls: string[] = [];
+    const pushUrl = (u?: string | null) => {
+      if (u && !urls.includes(u)) urls.push(u);
+    };
+    for (const img of galleryImages) {
+      if (img.scope === "variant" && img.variantCode === variant.code) {
+        pushUrl(img.url);
+      }
+    }
+    for (const u of variant.images || []) {
+      pushUrl(u);
+    }
+    if (familyCode && !isExcludedBeltSku(variant.code)) {
+      const beltMedia = getBeltSkuMedia(familyCode, variant.code);
+      if (beltMedia) {
+        pushUrl(beltMedia.realProductImage);
+        pushUrl(beltMedia.profileDrawingWebp);
+      }
+    }
+    return urls;
+  };
+
+  const openVariantImagePreview = (variant: ProductVariant) => {
+    const exactImages = getVariantLinkedImages(variant);
+    const beltMedia =
+      familyCode && !isExcludedBeltSku(variant.code)
+        ? getBeltSkuMedia(familyCode, variant.code)
+        : null;
+    const familyImage = galleryImages.find(img => img.scope === "family")?.url || null;
+    onSelect(variant.code);
+    setImagePreview({
+      code: variant.code,
+      name: variant.name,
+      src: exactImages[0] || familyImage,
+      secondarySrc:
+        beltMedia && exactImages[0] !== beltMedia.profileDrawingWebp
+          ? beltMedia.profileDrawingWebp
+          : exactImages[1] || null,
+      realImageStatus: beltMedia?.realImageStatus,
+      familyReference: exactImages.length === 0 && Boolean(familyImage),
+    });
+  };
+
+  return (
+    <section
+      className="space-y-3 rounded-2xl border border-slate-200 p-4 bg-white shadow-2xs"
+      aria-label="سایزها و کدهای کالا"
+    >
+      <div className="flex flex-wrap justify-between gap-2 items-center">
+        <div>
+          <h2 className="font-bold text-sm text-[#37383b]">
+            انتخاب نوع، سایز و کد کالا
+          </h2>
+          <p className="text-[11px] text-slate-500 mt-0.5">
+            با انتخاب هر کد کالا، تصویر اختصاصی، مشخصات فنی و قیمت همان کد نمایش
+            داده می‌شود.
+          </p>
+        </div>
+        <span className="text-xs font-semibold text-slate-600">
+          {toPersianDigits(variants.length)} کد کالا در این خانواده
+        </span>
+      </div>
+
+      {variants.length > 3 && (
+        <label className="block text-xs text-slate-600">
+          جستجو در سایز، کد، مدل یا شرح کالا
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setPage(1);
+            }}
+            className="mt-1.5 w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-[#E06518] focus:outline-none"
+            placeholder="مثلاً 34265 یا Z18 یا 5*42"
+          />
+        </label>
+      )}
+
+      <div className="max-h-80 overflow-auto rounded-xl border border-slate-200">
+        <table className="w-full text-xs text-right border-collapse">
+          <thead className="sticky top-0 bg-slate-100 text-slate-700 z-10 border-b border-slate-200">
+            <tr>
+              <th className="p-2.5 font-bold">کد کالا</th>
+              <th className="p-2.5 font-bold">سایز / مدل</th>
+              <th className="p-2.5 font-bold">شرح دقیق نوع کالا</th>
+              <th className="p-2.5 font-bold">تصویر</th>
+              <th className="p-2.5 font-bold">اطلاعات خرید</th>
+              <th className="p-2.5 font-bold text-center">انتخاب</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {results.slice((page - 1) * 20, page * 20).map((v) => {
+              const isSelected = selected === v.code;
+              const linkedImages = getVariantLinkedImages(v);
+              const unitPrice = v.price ?? v.prices?.retail ?? 0;
+              const isInquiry =
+                v.inquiryOnly !== undefined ? v.inquiryOnly : unitPrice <= 0;
+
+              return (
+                <tr
+                  key={v.code}
+                  onClick={() => onSelect(v.code)}
+                  className={`cursor-pointer transition-colors ${
+                    isSelected
+                      ? "bg-orange-50/90 hover:bg-orange-50"
+                      : "hover:bg-slate-50/80 bg-white"
+                  }`}
+                >
+                  <td
+                    className="p-2.5 font-mono font-bold text-slate-800 whitespace-nowrap"
+                    dir="ltr"
+                  >
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openVariantImagePreview(v);
+                      }}
+                      className="rounded-md text-[#C65A16] underline decoration-dotted underline-offset-4 hover:text-[#9F4310] focus-visible:outline-2 focus-visible:outline-[#E06518] focus-visible:outline-offset-2"
+                      aria-label={`نمایش تصویر کد کالا ${v.code}`}
+                    >
+                      {v.code}
+                    </button>
+                    {v.active === false && (
+                      <span className="block text-[10px] font-sans text-rose-600">
+                        غیرفعال موقت
+                      </span>
+                    )}
+                  </td>
+                  <td className="p-2.5 text-slate-700" dir="auto">
+                    <div className="font-semibold">{v.size || "—"}</div>
+                    {v.model && (
+                      <div
+                        className="text-[10.5px] font-mono text-slate-500 mt-0.5"
+                        dir="ltr"
+                      >
+                        {v.model}
+                      </div>
+                    )}
+                  </td>
+                  <td className="p-2.5 min-w-44 leading-6 text-slate-800">
+                    <div className="font-medium">{v.name}</div>
+                    {v.brand && (
+                      <div className="text-[10.5px] text-slate-500">
+                        برند: {v.brand}
+                      </div>
+                    )}
+                  </td>
+                  <td className="p-2.5 whitespace-nowrap">
+                    {linkedImages.length > 0 ? (
+                      <div className="inline-flex items-center gap-1.5">
+                        <div className="w-8 h-8 rounded-lg border border-slate-200 bg-white overflow-hidden shrink-0">
+                          <ProductImage
+                            src={linkedImages[0]}
+                            alt={v.name}
+                            className="w-full h-full object-contain p-0.5"
+                          />
+                        </div>
+                        {linkedImages.length > 1 && (
+                          <span className="text-[10.5px] text-slate-500 font-medium">
+                            +{toPersianDigits(linkedImages.length - 1)}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-[10.5px] text-slate-400 inline-flex items-center gap-1">
+                        <ImageIcon className="w-3 h-3" />
+                        <span>عمومی</span>
+                      </span>
+                    )}
+                  </td>
+                  <td className="p-2.5 whitespace-nowrap">
+                    {showPrices && !isInquiry && unitPrice > 0 ? (
+                      <div>
+                        <span className="font-mono font-bold text-emerald-800">
+                          {toPersianDigits(
+                            new Intl.NumberFormat("fa-IR").format(unitPrice),
+                          )}
+                        </span>
+                        <span className="text-[10.5px] text-slate-500 mr-1">
+                          تومان
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-[11px] font-semibold text-amber-700">
+                        {showPrices ? "نیازمند استعلام" : "در پنل کاربری"}
+                      </span>
+                    )}
+                  </td>
+                  <td className="p-2.5 text-center">
+                    <button
+                      type="button"
+                      aria-pressed={isSelected}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelect(v.code);
+                      }}
+                      className={`rounded-lg border px-2.5 py-1.5 text-xs font-bold whitespace-nowrap transition-colors inline-flex items-center gap-1 cursor-pointer ${
+                        isSelected
+                          ? "bg-[#E06518] border-[#E06518] text-white"
+                          : "border-orange-200 bg-white text-orange-700 hover:bg-orange-50"
+                      }`}
+                    >
+                      {isSelected ? (
+                        <>
+                          <Check className="w-3.5 h-3.5" />
+                          <span>انتخاب‌شده</span>
+                        </>
+                      ) : (
+                        <span>انتخاب {v.code}</span>
+                      )}
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {!results.length && (
+          <p className="p-4 text-sm text-slate-500 text-center">
+            کد یا سایز مطابق پیدا نشد.
+          </p>
+        )}
+      </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between text-xs pt-1">
+          <button
+            type="button"
+            disabled={page === 1}
+            onClick={() => setPage((p) => p - 1)}
+            className="disabled:opacity-40 px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer"
+          >
+            قبلی
+          </button>
+          <span className="text-slate-600">
+            صفحه {toPersianDigits(page)} از {toPersianDigits(totalPages)}
+          </span>
+          <button
+            type="button"
+            disabled={page === totalPages}
+            onClick={() => setPage((p) => p + 1)}
+            className="disabled:opacity-40 px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer"
+          >
+            بعدی
+          </button>
+        </div>
+      )}
+      {imagePreview && (
+        <Modal
+          isOpen={Boolean(imagePreview)}
+          onClose={() => setImagePreview(null)}
+          title={`تصاویر اختصاصی کد کالا: ${imagePreview.code}`}
+          maxWidth={imagePreview.secondarySrc ? "2xl" : "lg"}
+        >
+          <div className="space-y-3">
+            <div className={`grid gap-3 ${imagePreview.secondarySrc ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1"}`}>
+              <div className="grid min-h-[200px] max-h-[60dvh] place-items-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                {imagePreview.src ? (
+                  <ProductImage
+                    src={imagePreview.src}
+                    alt={`تصویر ${imagePreview.name} با کد ${imagePreview.code}`}
+                    className="max-h-[54dvh] w-full object-contain"
+                  />
+                ) : (
+                  <div className="px-5 py-12 text-center text-sm text-slate-500">
+                    برای این کد کالا هنوز تصویری در کاتالوگ ثبت نشده است.
+                  </div>
+                )}
+              </div>
+              {imagePreview.secondarySrc && (
+                <div className="grid min-h-[200px] max-h-[60dvh] place-items-center overflow-hidden rounded-2xl border border-slate-200 bg-white p-3">
+                  <ProductImage
+                    src={imagePreview.secondarySrc}
+                    alt={`نقشه پروفیل و ابعاد کد ${imagePreview.code}`}
+                    className="max-h-[54dvh] w-full object-contain"
+                  />
+                </div>
+              )}
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-black text-slate-800">{imagePreview.name}</p>
+              <p className="font-mono text-xs text-slate-500" dir="ltr">{imagePreview.code}</p>
+              {imagePreview.realImageStatus === 'REAL_IMAGE_NOT_FOUND' ? (
+                <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs leading-6 text-amber-800">
+                  تصویر واقعی فیزیکی اختصاصی این کد هنوز تأمین نشده است؛ نقشه پروفیل و ابعاد مهندسی اختصاصی همین کد در کنار تصویر قابل مشاهده است.
+                </p>
+              ) : imagePreview.familyReference ? (
+                <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs leading-6 text-amber-800">
+                  تصویر اختصاصی این کد ثبت نشده است؛ تصویر نمایش‌داده‌شده مرجع عمومی خانواده محصول است.
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </Modal>
+      )}
+    </section>
+  );
+};

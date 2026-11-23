@@ -1,0 +1,10 @@
+{
+  "name": "Remix Remix صنعت پیش | پیش به صنعت",
+  "description": "صنعت پیش؛ تولیدکننده، سازنده و بازرگانی قطعات صنعتی خطوط تولید، سیستم‌های انتقال قدرت، تسمه، پولی، یاتاقان و مشاوره هوشمند.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

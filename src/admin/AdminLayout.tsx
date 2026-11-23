@@ -1,0 +1,644 @@
+import { hydratePortal, flushPortalChanges } from '../services/portalRepository';
+import { isDatabaseCatalogHydrated, refreshAdminCatalog } from '../services/durableStorage';
+import './adminUx.css';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import {
+  LayoutDashboard,
+  Package,
+  FileSpreadsheet,
+  FileText,
+  ShoppingBag,
+  Users,
+  ShieldCheck,
+  Award,
+  Settings,
+  Search,
+  Bell,
+  LogOut,
+  ExternalLink,
+  Menu,
+  X,
+  ChevronDown,
+  AlertCircle,
+  Clock,
+  CheckCircle,
+  Sparkles,
+  Building2,
+  Megaphone,
+} from 'lucide-react';
+import { adminService, AdminUser } from '../services/adminService';
+import { SanatPishLogo } from '../components/common/BrandIdentity';
+import { portalContentService } from '../services/portalContentService';
+import { AdminLogin } from './AdminLogin';
+import { AdminDashboard } from './AdminDashboard';
+import { toPersianDigits } from '../utils/formatters';
+
+// Keep the initial admin bundle small. Each workspace is loaded only when opened.
+const AdminRankingPage = React.lazy(() => import('./AdminReports').then(module => ({ default: module.AdminRankingPage })));
+const ProductsModule = React.lazy(() => import('./modules/ProductsModule').then(module => ({ default: module.ProductsModule })));
+const BulkImportModule = React.lazy(() => import('./modules/BulkImportModule').then(module => ({ default: module.BulkImportModule })));
+const PricingInquiriesModule = React.lazy(() => import('./modules/PricingInquiriesModule').then(module => ({ default: module.PricingInquiriesModule })));
+const OrdersModule = React.lazy(() => import('./modules/OrdersModule').then(module => ({ default: module.OrdersModule })));
+const RealCustomersCrmModule = React.lazy(() => import('./modules/RealCustomersCrmModule').then(module => ({ default: module.RealCustomersCrmModule })));
+const AgenciesAdminModule = React.lazy(() => import('./modules/AgenciesAdminModule').then(module => ({ default: module.AgenciesAdminModule })));
+const CustomerGradingModule = React.lazy(() => import('./modules/CustomerGradingModule').then(module => ({ default: module.CustomerGradingModule })));
+const ContentStudioModule = React.lazy(() => import('./modules/ContentStudioModule').then(module => ({ default: module.ContentStudioModule })));
+const AnnouncementsAdminModule = React.lazy(() => import('./modules/AnnouncementsAdminModule').then(module => ({ default: module.AnnouncementsAdminModule })));
+const SettingsSystemModule = React.lazy(() => import('./modules/SettingsSystemModule').then(module => ({ default: module.SettingsSystemModule })));
+const AdminStaffUsersModule = React.lazy(() => import('./modules/AdminStaffUsersModule').then(module => ({ default: module.AdminStaffUsersModule })));
+const ClientsAdminModule = React.lazy(() => import('./modules/ClientsAdminModule').then(module => ({ default: module.ClientsAdminModule })));
+
+export const AdminLayout: React.FC = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Current admin session
+  const [currentUser, setCurrentUser] = useState<AdminUser | null>(null);
+  const [checking, setChecking] = useState(true);
+  const [bootstrapError, setBootstrapError] = useState('');
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogError, setCatalogError] = useState('');
+  const [catalogRetry, setCatalogRetry] = useState(0);
+  const [pendingGradingCount, setPendingGradingCount] = useState(0);
+  const [saveStatus, setSaveStatus] = useState({ state: '', message: '' });
+  useEffect(() => {
+    let mounted = true;
+    const sync = (event: Event) => {
+      const data = (event as CustomEvent).detail;
+      const nextUser: AdminUser | null = data.admin
+        ? {id:String(data.user?.authUserId||'admin'),username:String(data.user?.username||'admin'),
+            name:String(data.user?.fullName||'مدیریت صنعت پیش'),role:'super_admin',
+            email:String(data.user?.email||''),lastLogin:''}
+        : data.staff && data.staffUser
+        ? {id:String(data.staffUser.id),username:String(data.staffUser.username),
+            name:String(data.staffUser.name),role:'staff',email:String(data.staffUser.email||''),
+            permissions:data.permissions||{},lastLogin:''}
+        : null;
+      if (mounted) {
+        // ProductsModule and other role-aware modules read their actor from
+        // adminService; keep it synchronized with this verified server session.
+        adminService.setCurrentAdmin(nextUser);
+        setCurrentUser(nextUser);
+      }
+    };
+    const status = (event: Event) => { if (mounted) setSaveStatus((event as CustomEvent).detail); };
+    window.addEventListener('atlas-session-updated', sync);
+    window.addEventListener('atlas-portal-save-status', status);
+    hydratePortal().catch(error => {
+      if (mounted) setBootstrapError(error instanceof Error ? error.message : 'دریافت اطلاعات پنل مدیریت ناموفق بود.');
+    }).finally(() => { if (mounted) setChecking(false); });
+    return () => { mounted = false; window.removeEventListener('atlas-session-updated', sync); window.removeEventListener('atlas-portal-save-status', status); };
+  }, []);
+
+  const retryBootstrap = () => {
+    setChecking(true);
+    setBootstrapError('');
+    void hydratePortal().catch(error => {
+      setBootstrapError(error instanceof Error ? error.message : 'دریافت اطلاعات پنل مدیریت ناموفق بود.');
+    }).finally(() => setChecking(false));
+  };
+
+  // Active module tab
+  const [activeTab, setActiveTab] = useState<string>('dashboard');
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [globalSearchQuery, setGlobalSearchQuery] = useState('');
+  const [showModuleGuide,setShowModuleGuide]=useState(false);
+  const [collapsedGroups,setCollapsedGroups]=useState<string[]>([]);
+
+  // Sync tab with URL if needed
+  useEffect(() => {
+    const path = location.pathname;
+    if (path.includes('/admin/staff-users')) setActiveTab('staff_users');
+    else if (path.includes('/admin/reports/')) setActiveTab('reports');
+    else if (path.includes('/admin/products')) setActiveTab('products');
+    else if (path.includes('/admin/bulk-import')) setActiveTab('bulk_import');
+    else if (path.includes('/admin/inquiries')) setActiveTab('inquiries');
+    else if (path.includes('/admin/orders')) setActiveTab('orders');
+    else if (path.includes('/admin/crm') || path.includes('/admin/customers')) setActiveTab('crm');
+    else if (path.includes('/admin/announcements')) setActiveTab('announcements');
+    else if (path.includes('/admin/content')) setActiveTab('content_studio');
+    else if (path.includes('/admin/clients')) setActiveTab('clients');
+    else if (path.includes('/admin/agencies')) setActiveTab('agencies');
+    else if (path.includes('/admin/grading') || path.includes('/admin/credit')) setActiveTab('customer_grading');
+    else if (path.includes('/admin/settings')) setActiveTab('settings');
+    else if (path === '/admin' || path === '/admin/') {
+      const pendingModule = (location.state as {adminModule?: unknown} | null)?.adminModule;
+      setActiveTab(typeof pendingModule === 'string' ? pendingModule : 'dashboard');
+    }
+  }, [location.pathname, location.state]);
+
+  // The dashboard only needs lightweight portal documents. Load the full
+  // catalogue on demand when an authorized user opens products or bulk import.
+  useEffect(() => {
+    if (!currentUser || (activeTab !== 'products' && activeTab !== 'bulk_import')) return;
+    if (currentUser.role === 'staff' && !(currentUser.permissions?.[activeTab] || []).includes('view')) return;
+    if (isDatabaseCatalogHydrated()) {
+      setCatalogLoading(false);
+      setCatalogError('');
+      return;
+    }
+    let mounted = true;
+    setCatalogLoading(true);
+    setCatalogError('');
+    void refreshAdminCatalog()
+      .then(data => {
+        if (data.database !== true || !isDatabaseCatalogHydrated()) {
+          throw new Error('دریافت فهرست کالاها از پایگاه داده کامل نشد.');
+        }
+      })
+      .catch((error: unknown) => {
+        if (mounted) setCatalogError(error instanceof Error ? error.message : 'دریافت فهرست کالاها ناموفق بود.');
+      })
+      .finally(() => {
+        if (mounted) setCatalogLoading(false);
+      });
+    return () => { mounted = false; };
+  }, [activeTab, currentUser, catalogRetry]);
+
+  // The grading service also bundles spreadsheet tooling. Load its badge count
+  // asynchronously so XLSX is not part of the first admin paint.
+  useEffect(() => {
+    if (!currentUser) return;
+    let mounted = true;
+    void import('../services/pricingCreditService')
+      .then(({ pricingCreditService }) => {
+        if (mounted) setPendingGradingCount(
+          pricingCreditService.getCustomerApprovals().filter(item => item.status === 'pending').length
+        );
+      })
+      .catch(error => console.warn('[Admin] Could not load pending grading count.', error));
+    return () => { mounted = false; };
+  }, [currentUser]);
+
+  // Scroll to top when active tab changes
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  }, [activeTab]);
+
+  useEffect(()=>{
+    if(currentUser?.role!=='staff')return;
+    const visible=Object.entries(currentUser.permissions||{}).filter(([,actions])=>actions.includes('view')).map(([section])=>section);
+    if(!visible.includes(activeTab))setActiveTab(visible[0]||'no_access');
+  },[currentUser,activeTab]);
+
+  if (checking) return <div role="status" className="p-16 text-center">در حال بررسی دسترسی مدیریت…</div>;
+  if (bootstrapError) return (
+    <div dir="rtl" className="min-h-[60vh] flex items-center justify-center p-5">
+      <section role="alert" className="w-full max-w-lg rounded-2xl border border-red-200 bg-white p-6 text-right shadow-sm">
+        <h2 className="text-base font-black text-slate-800">بارگذاری پنل مدیریت کامل نشد</h2>
+        <p className="mt-2 text-sm leading-7 text-slate-600">{bootstrapError}</p>
+        <button type="button" onClick={retryBootstrap} className="mt-4 rounded-xl bg-[#E06518] px-5 py-2.5 text-sm font-bold text-white">تلاش مجدد</button>
+      </section>
+    </div>
+  );
+  if (!currentUser) {
+    return <AdminLogin onLoginSuccess={user => setCurrentUser(user)} />;
+  }
+
+  const canView=(section:string)=>currentUser.role==='super_admin'
+    || (currentUser.permissions?.[section]||[]).includes('view');
+
+  // Real-time notification counters
+  const pendingInquiries = adminService.getInquiries().filter(i => i.status === 'pending');
+  const pendingOrders = adminService.getOrders().filter(o => o.status === 'pending');
+  const pendingAgencies = adminService.getAgencyApplications().filter(a => a.status === 'pending');
+  const openTickets = adminService.getTickets().filter(t => t.status === 'open');
+  const activeAnnouncementsCount = portalContentService
+    .getAnnouncements()
+    .filter(a => portalContentService.getAnnouncementLifecycleStatus(a) === 'active').length;
+  const totalAlerts =
+    pendingInquiries.length + pendingOrders.length + pendingAgencies.length + pendingGradingCount + openTickets.length;
+
+  const handleLogout = async () => {
+    try { await flushPortalChanges(); } catch { return; }
+    adminService.logout();
+    setCurrentUser(null);
+  };
+
+  const navItems = [
+    {
+      id: 'dashboard',
+      label: 'داشبورد و گزارش‌ها',
+      icon: LayoutDashboard,
+      badge: null,
+    },
+    {
+      id: 'announcements',
+      label: 'اطلاعیه‌ها',
+      icon: Megaphone,
+      badge: activeAnnouncementsCount > 0 ? toPersianDigits(activeAnnouncementsCount) : '۳ سطح',
+      badgeColor: 'bg-[#E06518] text-white',
+    },
+    {
+      id: 'content_studio',
+      label: 'مدیریت محتوا',
+      icon: Sparkles,
+      badge: '۲ پنل',
+      badgeColor: 'bg-[#E06518] text-white',
+    },
+    {
+      id: 'crm',
+      label: 'مشتریان و CRM',
+      icon: Users,
+      badge: openTickets.length > 0 ? toPersianDigits(openTickets.length) : null,
+      badgeColor: 'bg-purple-500 text-white',
+    },
+    {
+      id: 'customer_grading',
+      label: 'اعتبار و قیمت‌ها',
+      icon: Award,
+      badge: pendingGradingCount > 0 ? toPersianDigits(pendingGradingCount) : null,
+      badgeColor: 'bg-[#E06518] text-white',
+    },
+    {
+      id: 'agencies',
+      label: 'نمایندگی‌ها',
+      icon: ShieldCheck,
+      badge: pendingAgencies.length > 0 ? toPersianDigits(pendingAgencies.length) : null,
+      badgeColor: 'bg-emerald-500 text-white',
+    },
+    {
+      id: 'products',
+      label: 'کاتالوگ و کالاها',
+      icon: Package,
+      badge: null,
+    },
+    {
+      id: 'bulk_import',
+      label: 'ورود گروهی کالا',
+      icon: FileSpreadsheet,
+      badge: null,
+    },
+    {
+      id: 'inquiries',
+      label: 'استعلام و پیش‌فاکتور',
+      icon: FileText,
+      badge: pendingInquiries.length > 0 ? toPersianDigits(pendingInquiries.length) : null,
+      badgeColor: 'bg-amber-500 text-white',
+    },
+    {
+      id: 'orders',
+      label: 'سفارش‌ها و لجستیک',
+      icon: ShoppingBag,
+      badge: pendingOrders.length > 0 ? toPersianDigits(pendingOrders.length) : null,
+      badgeColor: 'bg-blue-500 text-white',
+    },
+    {
+      id: 'clients',
+      label: 'مشتریان ما',
+      icon: Building2,
+      badge: null,
+    },
+    {
+      id: 'settings',
+      label: 'تنظیمات و امنیت',
+      icon: Settings,
+      badge: null,
+    },
+    {
+      id: 'staff_users',
+      label: 'کاربران و دسترسی‌ها',
+      icon: Users,
+      badge: null,
+    },
+  ];
+
+  // Grouping and navigation are UI only. Never substitute menu visibility for server-side permissions.
+  const groups=[
+    {title:'نمای کلی',ids:['dashboard']},
+    {title:'فروش و مشتریان',ids:['orders','inquiries','crm','customer_grading','agencies']},
+    {title:'کالا و محتوا',ids:['products','bulk_import','content_studio','announcements','clients']},
+    {title:'سامانه',ids:['settings','staff_users']},
+  ];
+  const descriptions:Record<string,string>={
+    dashboard:'نمای کلی و آمار فروش',orders:'سفارش‌ها، ارسال و بارنامه',inquiries:'پیگیری استعلام و پیش‌فاکتور',
+    crm:'ارتباط با مشتری و پشتیبانی',customer_grading:'سطوح خرید و قیمت‌گذاری',agencies:'مدیریت شبکه نمایندگی',
+    products:'کاتالوگ و مشخصات کالا',bulk_import:'ورود اطلاعات از اکسل',content_studio:'محتوای صفحات و پنل‌ها',
+    announcements:'اطلاعیه‌های سایت و کاربران',clients:'لوگوی مشتریان',settings:'تنظیمات و امنیت',staff_users:'ساخت کاربران واقعی و مدیریت مجوزها',reports:'رتبه‌بندی فروش'
+  };
+  const currentModule=navItems.find(item=>item.id===activeTab);
+  const visibleGroups=groups.map(g=>({...g,items:g.ids.map(id=>navItems.find(item=>item.id===id)!)
+    .filter(item=>item && canView(item.id) && (item.label+' '+descriptions[item.id]).includes(globalSearchQuery.trim()))})).filter(g=>g.items.length);
+  const selectModule=(id:string)=>{
+    if(!canView(id))return;
+    setActiveTab(id);
+    setIsMobileSidebarOpen(false);
+    setGlobalSearchQuery('');
+    if(id==='settings'){
+      if(location.pathname!=='/admin/settings')navigate('/admin/settings');
+    }else if(id==='staff_users'){
+      if(location.pathname!=='/admin/staff-users')navigate('/admin/staff-users');
+    }else if(location.pathname.startsWith('/admin/reports/') || location.pathname.startsWith('/admin/settings') || location.pathname.startsWith('/admin/staff-users')){
+      navigate('/admin',{state:{adminModule:id}});
+    }
+  };
+  const toggleGroup=(name:string)=>setCollapsedGroups(groups=>groups.includes(name)?groups.filter(item=>item!==name):[...groups,name]);
+  const renderModuleContent = () => {
+    if(!canView(activeTab))return <section role="alert" className="rounded-2xl border border-orange-200 bg-white p-8 text-sm font-bold text-slate-600">مجوز مشاهده این بخش برای حساب شما فعال نیست.</section>;
+    if (activeTab === 'products' || activeTab === 'bulk_import') {
+      if (catalogLoading) return <section role="status" className="rounded-2xl border border-slate-200 bg-white p-12 text-center text-sm text-slate-600">در حال دریافت فهرست کامل کالاها از پایگاه داده…</section>;
+      if (catalogError) return <section role="alert" className="rounded-2xl border border-red-200 bg-white p-6 text-right text-sm text-red-700"><p>{catalogError}</p><button type="button" onClick={() => setCatalogRetry(value => value + 1)} className="mt-3 rounded-xl bg-[#E06518] px-4 py-2 font-bold text-white">تلاش مجدد</button></section>;
+    }
+    switch (activeTab) {
+      case 'reports': {
+        const path=location.pathname;
+        const kind=path.endsWith('/top-products')?'products':path.endsWith('/top-customers')?'customers':'agencies';
+        return <AdminRankingPage kind={kind} />;
+      }
+      case 'dashboard':
+        return (
+          <AdminDashboard
+            onNavigateTab={tab => {
+              if (tab === 'pricing_inquiries') setActiveTab('inquiries');
+              else if (tab === 'orders') setActiveTab('orders');
+              else if (tab === 'agencies') setActiveTab('agencies');
+              else if (tab === 'products') setActiveTab('products');
+              else if (tab === 'customer_grading') setActiveTab('customer_grading');
+              else if (tab === 'announcements') setActiveTab('announcements');
+              else if (tab === 'content_studio') setActiveTab('content_studio');
+              else if (tab === 'crm') setActiveTab('crm');
+              else if (tab === 'clients') setActiveTab('clients');
+              else setActiveTab(tab);
+            }}
+          />
+        );
+      case 'announcements':
+        return <AnnouncementsAdminModule />;
+      case 'content_studio':
+        return <ContentStudioModule />;
+      case 'customer_grading':
+        return <CustomerGradingModule />;
+      case 'products':
+        return <ProductsModule />;
+      case 'bulk_import':
+        return <BulkImportModule />;
+      case 'inquiries':
+        return <PricingInquiriesModule />;
+      case 'orders':
+        return <OrdersModule />;
+      case 'crm':
+        return <RealCustomersCrmModule />;
+      case 'clients':
+        return <ClientsAdminModule />;
+      case 'agencies':
+        return <AgenciesAdminModule />;
+      case 'settings':
+        return <SettingsSystemModule />;
+      case 'staff_users':
+        return <AdminStaffUsersModule />;
+      default:
+        return <AdminDashboard onNavigateTab={t => setActiveTab(t)} />;
+    }
+  };
+
+  return (
+    <div className="sanat-admin min-h-screen bg-[#F7F8FA] flex flex-col md:flex-row text-slate-900 font-sans" dir="rtl">
+      {saveStatus.state && <div role={saveStatus.state === 'error' ? 'alert' : 'status'} className={`fixed bottom-4 left-4 right-4 sm:right-auto z-[100] max-w-xl rounded-xl border bg-white px-4 py-3 text-sm shadow-lg ${saveStatus.state === 'error' ? 'text-red-700 border-red-300' : 'text-emerald-700 border-emerald-200'}`}>{saveStatus.state === 'error' ? saveStatus.message : saveStatus.state === 'saving' ? 'در حال ذخیره تغییرات…' : 'تغییرات در سرور ذخیره شد.'}</div>}
+      {/* Mobile Sidebar Overlay */}
+      {isMobileSidebarOpen && (
+        <div
+          onClick={() => setIsMobileSidebarOpen(false)}
+          className="fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-xs md:hidden"
+        />
+      )}
+
+      {/* --- SIDEBAR (سایدبار راست سرمه‌ای تیره با آیکون) --- */}
+      <aside
+        className={`fixed md:sticky top-0 right-0 z-50 h-screen w-64 bg-white text-[#55565A] flex flex-col justify-between transition-transform duration-300 ease-in-out border-l border-[#E9EAEC] shrink-0 ${
+          isMobileSidebarOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'
+        }`}
+      >
+        {/* Top Branding */}
+        <div>
+          <div className="p-4 border-b border-[#ECEDEF] flex items-center justify-between">
+            <div className="min-w-0 flex flex-col items-start gap-1.5">
+              <SanatPishLogo className="block w-[152px] h-[55px] object-contain object-right" alt="لوگوی صنعت پیش" priority />
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-[10px] text-slate-500 font-medium">سامانه مدیریت متمرکز B2B</span>
+              </div>
+            </div>
+
+            {/* Mobile close button */}
+            <button
+              onClick={() => setIsMobileSidebarOpen(false)}
+              className="p-1 rounded-lg text-slate-400 hover:text-white md:hidden"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Every existing module remains reachable, organized by task. */}
+          <nav aria-label="بخش‌های پنل مدیریت" className="p-3 space-y-4 overflow-y-auto max-h-[calc(100vh-205px)]">
+            {visibleGroups.map(group=><div key={group.title} className="space-y-1">
+              <button type="button" onClick={()=>toggleGroup(group.title)} aria-expanded={!!globalSearchQuery.trim()||!collapsedGroups.includes(group.title)} className="flex w-full items-center justify-between rounded-lg px-3 pt-2 pb-1 text-[11px] text-[#85868A] font-bold hover:bg-[#F7F8FA]">
+                <span>{group.title} <span className="mr-1 text-[#ADADB0]">({toPersianDigits(group.items.length)})</span></span>
+                <ChevronDown size={14} className={`transition-transform ${collapsedGroups.includes(group.title)&&!globalSearchQuery.trim()?'rotate-90':''}`}/>
+              </button>
+              {(!collapsedGroups.includes(group.title)||!!globalSearchQuery.trim())&&group.items.map(item=>{const Icon=item.icon;const active=activeTab===item.id;return <button type="button" key={item.id} title={descriptions[item.id]} aria-current={active?'page':undefined}
+                onClick={()=>selectModule(item.id)} className={`w-full flex justify-between items-center gap-2 rounded-xl px-3 py-2.5 text-[13px] text-right font-semibold transition-colors ${active?'bg-[#FFF0E5] text-[#A8450B] border border-[#F9D0B0]':'text-[#55565A] hover:bg-[#F3F4F6]'}`}>
+                <span className="flex min-w-0 items-center gap-3"><Icon className={`w-[18px] h-[18px] shrink-0 ${active?'text-[#E06518]':'text-[#85868A]'}`}/><span className="truncate">{item.label}</span></span>
+                {item.badge&&<span className="text-[10px] font-bold rounded-full px-2 py-0.5 bg-[#F0F1F2] text-[#55565A]">{item.badge}</span>}
+              </button>})}
+            </div>)}
+            {!visibleGroups.length&&<p className="p-4 text-xs text-center">بخشی پیدا نشد.</p>}
+          </nav>
+        </div>
+
+                {/* Bottom User Profile & External Store Link */}
+        <div className="p-4 border-t border-[#E9EAEC] bg-[#FAFAFB] space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-full bg-orange-500/20 text-[#E06518] border border-orange-500/30 flex items-center justify-center font-bold text-xs">
+                {currentUser.name.slice(0, 1)}
+              </div>
+              <div className="text-right">
+                <div className="text-xs font-bold text-[#55565A] line-clamp-1">{currentUser.name}</div>
+                <div className="text-[10px] text-slate-400">{currentUser.role}</div>
+              </div>
+            </div>
+
+            <button
+              onClick={handleLogout}
+              title="خروج از حساب مدیریت"
+              className="p-1.5 rounded-xl text-slate-400 hover:text-red-400 hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
+
+          <button
+            onClick={() => navigate('/')}
+            className="w-full py-2 px-3 rounded-xl bg-white border border-[#E9EAEC] hover:border-[#E06518] text-[#55565A] text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <ExternalLink className="w-3.5 h-3.5 text-[#E06518]" />
+            <span>مشاهده فروشگاه عمومی</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* --- MAIN BODY & HEADER --- */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Top Header Bar */}
+        <header className="sticky top-0 z-30 h-16 bg-white border-b border-slate-200 px-4 sm:px-6 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            {/* Mobile Hamburger */}
+            <button
+              onClick={() => setIsMobileSidebarOpen(true)}
+              className="p-2 rounded-xl text-slate-600 hover:bg-slate-100 md:hidden cursor-pointer"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+
+            {/* Global Search Bar */}
+            <div className="relative w-48 sm:w-64 md:w-80">
+              <input
+                type="text"
+                value={globalSearchQuery}
+                onChange={e => setGlobalSearchQuery(e.target.value)}
+                placeholder="جستجو در بخش‌های مدیریت..."
+                className="w-full h-10 pr-10 pl-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-800 outline-none focus:border-[#E06518] focus:bg-white transition-all"
+              />
+              <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
+            </div>
+          </div>
+
+          {/* Header Action Items */}
+          <div className="flex items-center gap-3">
+            {/* System Status Pill */}
+            <div className="hidden lg:flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-[11px] text-slate-600 font-medium">
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              <span>پایگاه داده: آنلاین و سینک</span>
+            </div>
+
+            {/* Notifications Popover */}
+            <div className="relative">
+              <button
+                onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+                className="p-2.5 rounded-2xl bg-slate-50 hover:bg-slate-100 text-slate-600 relative transition-colors cursor-pointer border border-slate-200"
+              >
+                <Bell className="w-4 h-4" />
+                {totalAlerts > 0 && (
+                  <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-[#C95210] text-white text-[10px] font-bold font-mono flex items-center justify-center shadow-xs animate-pulse">
+                    {toPersianDigits(totalAlerts)}
+                  </span>
+                )}
+              </button>
+
+              {isNotificationsOpen && (
+                <div className="absolute left-0 mt-2 w-80 bg-white rounded-3xl border border-slate-200 shadow-2xl p-4 z-50 space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <span className="font-black text-xs text-[#55565A]">اعلان‌های نیازمند اقدام فوری</span>
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      {toPersianDigits(totalAlerts)} مورد
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 text-xs">
+                    {pendingInquiries.length > 0 && (
+                      <div
+                        onClick={() => {
+                          setActiveTab('inquiries');
+                          setIsNotificationsOpen(false);
+                        }}
+                        className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 hover:bg-amber-100 transition-colors cursor-pointer flex items-center gap-2"
+                      >
+                        <Clock className="w-4 h-4 text-amber-600 shrink-0" />
+                        <span className="text-amber-900 font-medium">
+                          {toPersianDigits(pendingInquiries.length)} استعلام قیمت در انتظار پاسخ
+                        </span>
+                      </div>
+                    )}
+
+                    {pendingOrders.length > 0 && (
+                      <div
+                        onClick={() => {
+                          setActiveTab('orders');
+                          setIsNotificationsOpen(false);
+                        }}
+                        className="p-2.5 rounded-xl bg-blue-50 border border-blue-200 hover:bg-blue-100 transition-colors cursor-pointer flex items-center gap-2"
+                      >
+                        <ShoppingBag className="w-4 h-4 text-blue-600 shrink-0" />
+                        <span className="text-blue-900 font-medium">
+                          {toPersianDigits(pendingOrders.length)} سفارش در انتظار تأیید یا فیش
+                        </span>
+                      </div>
+                    )}
+
+                    {pendingAgencies.length > 0 && (
+                      <div
+                        onClick={() => {
+                          setActiveTab('agencies');
+                          setIsNotificationsOpen(false);
+                        }}
+                        className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 transition-colors cursor-pointer flex items-center gap-2"
+                      >
+                        <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span className="text-emerald-900 font-medium">
+                          {toPersianDigits(pendingAgencies.length)} تقاضای جدید نمایندگی
+                        </span>
+                      </div>
+                    )}
+
+                    {openTickets.length > 0 && (
+                      <div
+                        onClick={() => {
+                          setActiveTab('crm');
+                          setIsNotificationsOpen(false);
+                        }}
+                        className="p-2.5 rounded-xl bg-purple-50 border border-purple-200 hover:bg-purple-100 transition-colors cursor-pointer flex items-center gap-2"
+                      >
+                        <AlertCircle className="w-4 h-4 text-purple-600 shrink-0" />
+                        <span className="text-purple-900 font-medium">
+                          {toPersianDigits(openTickets.length)} تیکت پشتیبانی فنی بی‌پاسخ
+                        </span>
+                      </div>
+                    )}
+
+                    {totalAlerts === 0 && (
+                      <div className="py-6 text-center text-slate-400 text-xs">
+                        تمام هشدارها و موارد بررسی شده‌اند!
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Quick Profile Pill */}
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-slate-50 border border-slate-200">
+              <div className="w-7 h-7 rounded-xl bg-[#55565A] text-white flex items-center justify-center text-xs font-black">
+                A
+              </div>
+              <div className="hidden sm:block text-right">
+                <div className="text-[11px] font-bold text-[#55565A]">{currentUser.name}</div>
+                <div className="text-[9px] text-slate-400 font-mono">{currentUser.username}</div>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* Content Area (محتوای روی زمینه روشن) */}
+        <main className="flex-1 p-4 sm:p-6 lg:p-7 max-w-screen-2xl w-full mx-auto space-y-5">
+          <section aria-label="عنوان و مسیر بخش" className="rounded-2xl border border-[#ECEDEF] bg-white px-5 py-4 flex flex-wrap items-center justify-between gap-4">
+            <div><p className="text-[11px] text-[#85868A] mb-1">پنل مدیریت / {currentModule?.label||'گزارش‌ها'}</p><h2 className="font-black text-lg text-[#55565A]">{currentModule?.label||'گزارش‌ها'}</h2><p className="text-xs text-[#85868A] mt-1">{descriptions[activeTab]}</p></div>
+            <button type="button" onClick={()=>setShowModuleGuide(v=>!v)} className="rounded-xl border border-[#F4C5A3] px-3 py-2 text-xs font-bold text-[#B34D10] hover:bg-[#FFF3EA]">{showModuleGuide?'بستن راهنمای بخش‌ها':'راهنمای بخش‌ها'}</button>
+          </section>
+          {showModuleGuide&&<section className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3" aria-label="راهنمای ماژول‌ها">
+            {navItems.filter(item=>canView(item.id)).map(item=><button type="button" key={item.id} onClick={()=>{selectModule(item.id);setShowModuleGuide(false)}} className="bg-white border border-[#ECEDEF] hover:border-[#E06518] rounded-xl p-4 text-right"><span className="text-sm font-bold">{item.label}</span><p className="text-xs text-[#85868A] mt-1">{descriptions[item.id]}</p></button>)}
+          </section>}
+          <React.Suspense fallback={<section data-admin-module-loading="true" role="status" className="rounded-2xl border border-slate-200 bg-white p-12 text-center text-sm text-slate-600">در حال بارگذاری بخش مدیریت…</section>}>
+            {renderModuleContent()}
+          </React.Suspense>
+          <div className="h-16 md:hidden" aria-hidden="true" />
+          <nav aria-label="دسترسی سریع موبایل" className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-xl border-t border-[#E8EAEE] px-2 py-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] grid grid-cols-4 gap-1 shadow-[0_-4px_20px_rgba(0,0,0,0.04)]">
+            {([{id:'dashboard',label:'خانه',icon:LayoutDashboard},{id:'orders',label:'سفارش‌ها',icon:ShoppingBag},{id:'products',label:'کالاها',icon:Package}] as const).filter(item=>canView(item.id)).map(item=>{const Icon=item.icon;return <button key={item.id} type="button" onClick={()=>selectModule(item.id)} aria-current={activeTab===item.id?'page':undefined} className={`flex flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-[10px] ${activeTab===item.id?'text-[#E06518] bg-[#FFF4ED]':'text-[#55565A]'}`}><Icon size={18}/>{item.label}</button>})}
+            <button type="button" onClick={()=>setIsMobileSidebarOpen(true)} className="flex flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-[10px] text-[#55565A]"><Menu size={18}/>همه بخش‌ها</button>
+          </nav>
+        </main>
+      </div>
+    </div>
+  );
+};

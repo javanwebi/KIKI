@@ -1,0 +1,1274 @@
+import { PulleyCatalogPage } from "./PulleyCatalogPage";
+import { ProductCard } from "../components/product/ProductCard";
+import { toDirectSkuProduct, useDirectSkus } from "../components/catalog/DirectSkuProducts";
+import { getProductDisplayBrands, productHasDisplayBrand } from "../utils/catalogBrands";
+import { getFamilyMenuAssignment } from "../services/catalogTaxonomyResolver";
+import {
+  matchesProductSearch,
+  CATALOGUE_SKU_COUNT,
+  categorySlugFor,
+} from "../data/userProducts";
+import { ProductImage } from "../components/product/ProductImage";
+import { STORE_ASSETS } from "../assets/images";
+import { isDatabaseCatalogHydrated } from "../services/durableStorage";
+import { resolveExcelCategoryArtwork } from "../utils/excelCategoryCatalog";
+import "./products-page-premium.css";
+import React, { useState, useMemo, useEffect, useRef } from "react";
+import { Link, useSearchParams, useNavigate } from "react-router-dom";
+import { scrollToSectionElement } from "../components/layout/ScrollToTop";
+import { getAllProducts, subscribeCatalogChanges } from "../data/mockGenerator";
+import {
+  getManagedCategories,
+  findCatalogCategory,
+  matchesCatalogCategory,
+  resolveCategorySlug,
+} from "../data/categories";
+import { CategoryNavigation } from "../components/catalog/CategoryNavigation";
+import { Product } from "../types";
+import { toPersianDigits } from "../utils/formatters";
+import { useAuth } from "../context/AuthContext";
+import { useCart } from "../context/CartContext";
+import { useWishlist } from "../context/WishlistContext";
+import {
+  Search,
+  Filter,
+  SlidersHorizontal,
+  ChevronLeft,
+  ChevronRight,
+  Heart,
+  ShoppingCart,
+  Eye,
+  Check,
+  Package,
+  Layers,
+  Sparkles,
+  Grid3X3,
+  List,
+  RotateCcw,
+  Tag,
+  Cpu,
+  Grid,
+  CircleDot,
+  Shield,
+  Link as LinkIcon,
+  Scissors,
+  ShieldCheck,
+  ArrowUpDown,
+  Image as ImageIcon,
+  X,
+} from "lucide-react";
+
+const BELT_CATEGORY_SLUG = categorySlugFor("تسمه و انتقال نیرو");
+
+type LiveFamilyMenuIndexEntry = {
+  familyCode: string;
+  categorySlug: string;
+  submenuName: string | null;
+  leafName: string | null;
+  method?: string;
+};
+
+function matchesProductMenuSelection(
+  product: Product,
+  selectedCategory: string,
+  selectedSubcategory: string,
+  liveIndex: Record<string, LiveFamilyMenuIndexEntry>,
+  directSkuCodeSet: Set<string>,
+): boolean {
+  if (selectedCategory === "swr-forza-exclusive") {
+    return getProductDisplayBrands(product).some((brand) => brand === "SWR" || brand === "FORZA");
+  }
+
+  if (selectedCategory === "all" && selectedSubcategory === "all") return true;
+
+  const isExcelSlug = /^excel-v2-[0-9]+-[0-9]+$/.test(selectedCategory);
+  if (selectedCategory !== "all" && !isExcelSlug) {
+    return matchesCatalogCategory(product, selectedCategory, selectedSubcategory);
+  }
+
+  const normalize = (value: string) =>
+    String(value || "").replace(/ي/g, "ی").replace(/ك/g, "ک").replace(/[\u200c\s]+/g, " ").trim();
+
+  if (directSkuCodeSet.has(product.code)) {
+    if (selectedCategory !== "all") {
+      return matchesCatalogCategory(product, selectedCategory, selectedSubcategory);
+    }
+    if (selectedSubcategory === "all") return true;
+    const target = normalize(selectedSubcategory);
+    return [product.submenu, product.subcategory]
+      .some((value) => normalize(String(value || "")) === target);
+  }
+
+  const liveAssignment = liveIndex[product.code];
+  const assignment = ['admin_verified','excel_source_verified','engineering_audited','taxonomy_gap'].includes(String(liveAssignment?.method || ''))
+        ? liveAssignment
+        : getFamilyMenuAssignment(product);
+  if (!assignment) return false;
+
+  const assignedSlug = resolveCategorySlug(assignment.categorySlug || "");
+  if (isExcelSlug && assignedSlug !== selectedCategory) return false;
+  if (selectedSubcategory === "all") return true;
+
+  const target = normalize(selectedSubcategory);
+  return [assignment.submenuName, assignment.leafName, product.submenu, product.subcategory]
+    .some((value) => normalize(String(value || "")) === target);
+}
+
+const CATEGORY_ICONS: Record<string, React.ReactNode> = {
+  "تسمه و انتقال نیرو": <Layers className="w-4 h-4" />,
+  "پولی و انتقال نیرو": <CircleDot className="w-4 h-4" />,
+  "بلبرینگ و یاتاقان": <Shield className="w-4 h-4" />,
+  "زنجیر و چرخ‌زنجیر": <LinkIcon className="w-4 h-4" />,
+  "تجهیزات خطوط کاشی و سرامیک": <Grid className="w-4 h-4" />,
+  "نوار و تسمه نقاله": <Layers className="w-4 h-4" />,
+  "قطعات پمپ و سیالات": <Cpu className="w-4 h-4" />,
+  "نساجی": <Scissors className="w-4 h-4" />,
+  "تجهیزات نساجی": <Scissors className="w-4 h-4" />,
+};
+
+const CATEGORY_ARTWORK: Record<string, string> = {
+  "تسمه و انتقال نیرو": STORE_ASSETS.categories.belts,
+  "پولی و انتقال نیرو": STORE_ASSETS.categories.pulleys,
+  "بلبرینگ و یاتاقان": STORE_ASSETS.categories.bearings,
+  "زنجیر و چرخ‌زنجیر": STORE_ASSETS.categories.chains,
+  "نوار و تسمه نقاله": STORE_ASSETS.categories.conveyor,
+  "تجهیزات خطوط کاشی و سرامیک": STORE_ASSETS.categories.ceramic,
+  "نساجی": STORE_ASSETS.categories.textile,
+};
+
+export const ProductsPage: React.FC = () => {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { currentUser, openAuthModal } = useAuth();
+  const { addToCart } = useCart();
+  const { toggleWishlist, isInWishlist } = useWishlist();
+  const directSkuRecords = useDirectSkus();
+
+  // URL-driven or local state
+  const categoryParam = resolveCategorySlug(
+    searchParams.get("category") || "all",
+  );
+  const subParam = searchParams.get("sub") || "all";
+  const queryParam = searchParams.get("q") || "";
+  const brandParam = searchParams.get("brand") || "all";
+  const stockParam = searchParams.get("stock") === "1";
+  const imageParam = searchParams.get("image") === "1";
+
+  const [selectedCategory, setSelectedCategory] =
+    useState<string>(categoryParam);
+  const [selectedSubcategory, setSelectedSubcategory] =
+    useState<string>(subParam);
+  const [selectedBrand, setSelectedBrand] = useState<string>(brandParam);
+  const [searchQuery, setSearchQuery] = useState<string>(queryParam);
+  const [sortBy, setSortBy] = useState<
+    "code_asc" | "name_asc" | "rating_desc" | "stock_desc"
+  >("code_asc");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [inStockOnly, setInStockOnly] = useState<boolean>(stockParam);
+  const [hasCatalogueImageFilter, setHasCatalogueImageFilter] =
+    useState<boolean>(imageParam);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const mobileFilterCloseRef = useRef<HTMLButtonElement>(null);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [addedItemCode, setAddedItemCode] = useState<string | null>(null);
+  const [compareCodes, setCompareCodes] = useState<string[]>([]);
+  const [compareModalOpen, setCompareModalOpen] = useState<boolean>(false);
+  const resultsSectionRef = useRef<HTMLDivElement>(null);
+
+  const PAGE_SIZE = 24;
+  // A Supabase /api/runtime hydration replaces the initial catalogue snapshot.
+  // Keep the listing reactive; otherwise the first JSON-derived snapshot can
+  // remain visible even after fresh PostgreSQL products arrive.
+  const [catalogVersion, setCatalogVersion] = useState(0);
+  const [catalogReady, setCatalogReady] = useState(() => isDatabaseCatalogHydrated());
+  useEffect(() => subscribeCatalogChanges(() => {
+    setCatalogVersion((version) => version + 1);
+    setCatalogReady(isDatabaseCatalogHydrated());
+  }), []);
+  useEffect(() => {
+    if (!mobileFiltersOpen && !compareModalOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    document.body.style.overflow = "hidden";
+    const focusableElements = () => Array.from(document.querySelectorAll<HTMLElement>(
+      ".catalogue-filter-sheet a[href], .catalogue-filter-sheet button:not([disabled]), .catalogue-filter-sheet input:not([disabled]), .catalogue-filter-sheet select:not([disabled]), .catalogue-filter-sheet [tabindex]:not([tabindex='-1'])"
+    ));
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMobileFiltersOpen(false);
+        setCompareModalOpen(false);
+        return;
+      }
+      if (event.key !== "Tab" || !mobileFiltersOpen) return;
+      const items = focusableElements();
+      if (!items.length) {
+        event.preventDefault();
+        mobileFilterCloseRef.current?.focus();
+        return;
+      }
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    if (mobileFiltersOpen) mobileFilterCloseRef.current?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+      previousFocus?.focus();
+    };
+  }, [mobileFiltersOpen, compareModalOpen]);
+  const allProducts = useMemo(() => getAllProducts(), [catalogVersion]);
+  const directSkuProducts = useMemo(
+    () => directSkuRecords.map(toDirectSkuProduct),
+    [directSkuRecords],
+  );
+  const familyCodeSet = useMemo(() => new Set(allProducts.map((product) => product.code.toLowerCase())), [allProducts]);
+  const allCatalogProducts = useMemo(() => {
+    const seen = new Set<string>(familyCodeSet);
+    const combined = [...allProducts];
+    directSkuProducts.forEach((product) => {
+      const key = product.code.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      combined.push(product);
+    });
+    return combined;
+  }, [allProducts, directSkuProducts, familyCodeSet]);
+  const directSkuCodeSet = useMemo(
+    () => new Set(directSkuProducts.filter((product) => !familyCodeSet.has(product.code.toLowerCase())).map((product) => product.code)),
+    [directSkuProducts, familyCodeSet],
+  );
+  const [liveFamilyMenuIndex, setLiveFamilyMenuIndex] = useState<Record<string, LiveFamilyMenuIndexEntry>>({});
+  useEffect(() => {
+    let active = true;
+    fetch("/api/catalog/menu-family-index", { credentials: "same-origin", cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (!active || !payload?.success || !Array.isArray(payload.assignments)) return;
+        const index: Record<string, LiveFamilyMenuIndexEntry> = {};
+        for (const entry of payload.assignments as LiveFamilyMenuIndexEntry[]) {
+          if (entry?.familyCode && entry?.categorySlug) index[entry.familyCode] = entry;
+        }
+        setLiveFamilyMenuIndex(index);
+      })
+      .catch(() => {
+        // The checked-in approved mapping remains a safe read-only fallback.
+      });
+    return () => { active = false; };
+  }, [catalogVersion]);
+  const displayCatalogProducts = useMemo(
+    () => allCatalogProducts.map((product) => {
+      if (directSkuCodeSet.has(product.code)) return product;
+      const liveAssignment = liveFamilyMenuIndex[product.code];
+      const assignment = ['admin_verified','excel_source_verified','engineering_audited','taxonomy_gap'].includes(String(liveAssignment?.method || ''))
+        ? liveAssignment
+        : getFamilyMenuAssignment(product);
+      if (!assignment) return product;
+      return {
+        ...product,
+        submenu: assignment.submenuName || product.submenu,
+        subcategory: assignment.leafName || assignment.submenuName || product.subcategory,
+      };
+    }),
+    [allCatalogProducts, directSkuCodeSet, liveFamilyMenuIndex],
+  );
+  const managedCategories = useMemo(
+    () => getManagedCategories().filter((category) => category.active !== false),
+    [catalogVersion],
+  );
+
+  // Total products with official uploaded catalogue images
+  const countWithImages = useMemo(() => {
+    return allCatalogProducts.filter((p) => p.hasCatalogueImage).length;
+  }, [allCatalogProducts]);
+
+  // Synchronize category state if URL changes
+  useEffect(() => {
+    setSelectedCategory(categoryParam);
+    setSelectedSubcategory(subParam);
+    setSearchQuery(queryParam);
+    setSelectedBrand(brandParam);
+    setInStockOnly(stockParam);
+    setHasCatalogueImageFilter(imageParam);
+    setCurrentPage(1);
+  }, [categoryParam, subParam, queryParam, brandParam, stockParam, imageParam]);
+
+  // Legacy category-query URLs for belts should land on the dedicated, canonical belt page.
+  useEffect(() => {
+    if (categoryParam !== BELT_CATEGORY_SLUG) return;
+    const destinationParams = new URLSearchParams();
+    if (searchParams.has("sub")) destinationParams.set("sub", subParam);
+    if (queryParam.trim()) destinationParams.set("q", queryParam);
+    const query = destinationParams.toString();
+    navigate(`/category/${BELT_CATEGORY_SLUG}${query ? `?${query}` : ""}`, { replace: true });
+  }, [categoryParam, subParam, queryParam, searchParams, navigate]);
+
+  // First resolve the real category/subcategory scope, then derive its brand facet.
+  const categoryScopedProducts = useMemo(
+    () => displayCatalogProducts.filter((product) =>
+      matchesProductMenuSelection(product, selectedCategory, selectedSubcategory, liveFamilyMenuIndex, directSkuCodeSet),
+    ),
+    [displayCatalogProducts, selectedCategory, selectedSubcategory, liveFamilyMenuIndex, directSkuCodeSet],
+  );
+
+  const allBrands = useMemo(() => {
+    const brands = new Set<string>();
+    categoryScopedProducts.forEach((product) =>
+      getProductDisplayBrands(product).forEach((brand) => brands.add(brand)),
+    );
+    return Array.from(brands).sort((a, b) => a.localeCompare(b, "fa"));
+  }, [categoryScopedProducts]);
+
+  // Active category object
+  const activeCategoryObj = useMemo(() => {
+    return findCatalogCategory(selectedCategory);
+  }, [selectedCategory]);
+
+  // Filtered families and direct SKU records share one result collection.
+  const filteredProducts = useMemo(() => {
+    let result = [...categoryScopedProducts];
+
+    // 3. Brand Filter uses the actual family/SKU brand fields, never placeholders.
+    if (selectedBrand !== "all") {
+      result = result.filter((product) => productHasDisplayBrand(product, selectedBrand));
+    }
+
+    // 4. In-Stock Filter
+    if (inStockOnly) {
+      result = result.filter((p) => p.stockKnown === true && p.stock > 0 && !p.inquiryOnly);
+    }
+
+    // 5. Official Catalogue Image Filter
+    if (hasCatalogueImageFilter) {
+      result = result.filter((p) => p.hasCatalogueImage);
+    }
+
+    // 6. Search Query
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      result = result.filter(
+        (p) =>
+          matchesProductSearch(p, q) ||
+          p.code.toLowerCase().includes(q) ||
+          p.name.toLowerCase().includes(q) ||
+          (p.nameEn && p.nameEn.toLowerCase().includes(q)) ||
+          getProductDisplayBrands(p).join(" ").toLowerCase().includes(q) ||
+          p.subcategory.toLowerCase().includes(q) ||
+          p.categoryName.toLowerCase().includes(q) ||
+          (p.tags && p.tags.some((t) => t.toLowerCase().includes(q))) ||
+          (p.technicalSpecs &&
+            p.technicalSpecs.some(
+              (s) =>
+                s.key.toLowerCase().includes(q) ||
+                s.value.toLowerCase().includes(q),
+            )),
+      );
+    }
+
+    // 7. Sorting
+    result.sort((a, b) => {
+      if (sortBy === "code_asc") {
+        return a.code.localeCompare(b.code, undefined, { numeric: true });
+      }
+      if (sortBy === "name_asc") {
+        return a.name.localeCompare(b.name, "fa");
+      }
+      if (sortBy === "rating_desc") {
+        return (b.rating || 0) - (a.rating || 0);
+      }
+      if (sortBy === "stock_desc") {
+        const aStock = a.stockKnown === true && !a.inquiryOnly ? a.stock : -1;
+        const bStock = b.stockKnown === true && !b.inquiryOnly ? b.stock : -1;
+        return bStock - aStock;
+      }
+      return 0;
+    });
+
+    return result;
+  }, [
+    categoryScopedProducts,
+    selectedCategory,
+    selectedSubcategory,
+    selectedBrand,
+    inStockOnly,
+    hasCatalogueImageFilter,
+    searchQuery,
+    sortBy,
+  ]);
+
+  // Pagination calculation
+  const totalPages = Math.ceil(filteredProducts.length / PAGE_SIZE) || 1;
+  const paginatedProducts = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredProducts.slice(start, start + PAGE_SIZE);
+  }, [filteredProducts, currentPage]);
+
+  const updateSearchParam = (key: string, value: string | null) => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (value) nextParams.set(key, value);
+    else nextParams.delete(key);
+    setSearchParams(nextParams, { replace: true });
+  };
+
+  const handleCategorySelect = (slug: string) => {
+    setSelectedCategory(slug);
+    setSelectedSubcategory("all");
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("sub");
+    setCurrentPage(1);
+    if (slug === "all") nextParams.delete("category");
+    else nextParams.set("category", slug);
+    setSearchParams(nextParams);
+    window.requestAnimationFrame(() => {
+      scrollToSectionElement(resultsSectionRef.current, { behavior: "smooth" });
+    });
+  };
+
+  const handleAddToCart = (product: Product, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (product.variants?.length) {
+      navigate(`/product/${encodeURIComponent(product.code)}`);
+      return;
+    }
+    if (!currentUser) {
+      openAuthModal();
+      return;
+    }
+    addToCart(product, 1);
+    setAddedItemCode(product.code);
+    setTimeout(() => setAddedItemCode(null), 1500);
+  };
+
+  const clearAdvancedFilters = () => {
+    setSelectedBrand("all");
+    setInStockOnly(false);
+    setHasCatalogueImageFilter(false);
+    setCurrentPage(1);
+    const nextParams = new URLSearchParams(searchParams);
+    ["brand", "stock", "image"].forEach((key) => nextParams.delete(key));
+    setSearchParams(nextParams, { replace: true });
+  };
+
+  const handleResetFilters = () => {
+    setSelectedCategory("all");
+    setSelectedSubcategory("all");
+    setSelectedBrand("all");
+    setSearchQuery("");
+    setInStockOnly(false);
+    setHasCatalogueImageFilter(false);
+    setSortBy("code_asc");
+    setCurrentPage(1);
+    const nextParams = new URLSearchParams(searchParams);
+    ["category", "sub", "q", "brand", "stock", "image"].forEach((key) => nextParams.delete(key));
+    setSearchParams(nextParams);
+  };
+
+  const activeFiltersCount =
+    (selectedCategory !== "all" ? 1 : 0) +
+    (selectedSubcategory !== "all" ? 1 : 0) +
+    (selectedBrand !== "all" ? 1 : 0) +
+    (inStockOnly ? 1 : 0) +
+    (hasCatalogueImageFilter ? 1 : 0) +
+    (searchQuery.trim() ? 1 : 0);
+
+  if (selectedCategory === "پولی-و-انتقال-نیرو") {
+    return <PulleyCatalogPage products={allCatalogProducts.filter(p => matchesCatalogCategory(p, selectedCategory) || /^excel-v2-4-[0-9]+$/.test(p.categorySlug))} directSkuCodes={directSkuCodeSet} />;
+  }
+
+  return (
+    <div className="catalogue-page catalogue-premium-page min-h-screen text-right" dir="rtl">
+      <div className="catalogue-container max-w-7xl mx-auto space-y-6">
+        {/* Breadcrumb Navigation */}
+        <nav className="catalogue-breadcrumbs flex items-center gap-2 text-xs text-slate-500 font-medium">
+          <Link to="/" className="hover:text-orange-600 transition-colors">
+            صفحه اصلی
+          </Link>
+          <ChevronLeft className="w-3.5 h-3.5 text-slate-400" />
+          <span className="text-slate-800 font-bold">
+            محصولات و کاتالوگ صنعتی
+          </span>
+          {activeCategoryObj && (
+            <>
+              <ChevronLeft className="w-3.5 h-3.5 text-slate-400" />
+              <span className="text-orange-600 font-bold">
+                {activeCategoryObj.name}
+              </span>
+            </>
+          )}
+        </nav>
+
+        {/* Industrial catalogue hero */}
+        <section className="catalogue-intro catalogue-hero">
+          <div className="catalogue-hero-copy">
+            <span className="store-eyebrow">کاتالوگ تخصصی صنعت پیش</span>
+            <h1>مرجع تأمین و انتخاب دقیق قطعات صنعتی</h1>
+            <p>
+              از خانواده و برند تا کد فنی و مشخصات مهندسی؛ قطعات خطوط تولید را در
+              کاتالوگ صنعت پیش سریع فیلتر، مقایسه و انتخاب کنید.
+            </p>
+            <div className="catalogue-hero-actions">
+              <a href="#catalog-products-results" className="catalogue-hero-primary">
+                مشاهده فهرست کالاها
+              </a>
+              <Link to="/identify-part" className="catalogue-hero-secondary">
+                شناسایی تصویری قطعه
+              </Link>
+              <Link to="/ai-consult" className="catalogue-hero-secondary">
+                مشاوره فنی فورزا
+              </Link>
+            </div>
+            <div className="catalogue-hero-metrics" aria-label="آمار کاتالوگ">
+              <span><strong>{catalogReady ? toPersianDigits(allProducts.length) : "—"}</strong><small>خانواده محصول</small></span>
+              <span><strong>{catalogReady ? toPersianDigits(CATALOGUE_SKU_COUNT) : "—"}</strong><small>کد فنی کالا</small></span>
+              <span><strong>{toPersianDigits(managedCategories.length || 14)}</strong><small>دسته تخصصی</small></span>
+            </div>
+          </div>
+          <div className="catalogue-hero-art" aria-hidden="true">
+            <img src={STORE_ASSETS.heroBanner} alt="" loading="eager" fetchPriority="high" decoding="async" />
+            <span className="catalogue-hero-art-label">تأمین مستقیم قطعات خطوط تولید</span>
+          </div>
+        </section>
+
+        {/* Minimal Category Selector Tabs */}
+        <section className="catalogue-category-rail">
+          <div className="catalogue-section-heading">
+            <div>
+              <span>دسته‌بندی کاتالوگ</span>
+              <h2>انتخاب سریع گروه کالایی</h2>
+            </div>
+            <Link to="/categories" className="catalogue-all-categories-link">
+              مشاهده صفحه دسته‌بندی‌ها <ChevronLeft className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+          <div
+            className="catalogue-category-track flex items-center gap-2 overflow-x-auto pb-1 pt-1 scrollbar-none"
+            style={{ scrollbarWidth: "none" }}
+          >
+            <button
+              onClick={() => handleCategorySelect("all")}
+              aria-pressed={selectedCategory === "all"}
+              className={`catalogue-category-tile catalogue-category-tile--all flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs shrink-0 transition-all cursor-pointer ${
+                selectedCategory === "all"
+                  ? "bg-[#55565A] text-white shadow-md"
+                  : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+              }`}
+            >
+              <span className="catalogue-category-art"><Package className="w-5 h-5" /></span>
+              <span className="catalogue-category-name">همه محصولات</span>
+              <span className="catalogue-category-count">
+                {catalogReady ? toPersianDigits(allProducts.length) : "—"}
+              </span>
+            </button>
+
+            {managedCategories.map((cat) => {
+              const isSelected = selectedCategory === cat.slug;
+              const icon = CATEGORY_ICONS[cat.name] || (
+                <Layers className="w-4 h-4" />
+              );
+              const artwork =
+                resolveExcelCategoryArtwork(cat.slug, cat.name, cat.image) ||
+                CATEGORY_ARTWORK[cat.name];
+              return (
+                <button
+                  key={cat.slug}
+                  onClick={() => handleCategorySelect(cat.slug)}
+                  aria-pressed={isSelected}
+                  className={`catalogue-category-tile flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs shrink-0 transition-all cursor-pointer ${
+                    isSelected
+                      ? "bg-orange-500 text-white shadow-md"
+                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                  }`}
+                >
+                  <span className="catalogue-category-art">
+                    {artwork ? <img src={artwork} alt="" loading="lazy" decoding="async" /> : icon}
+                  </span>
+                  <span className="catalogue-category-name">{cat.name}</span>
+                  <span className="catalogue-category-count">
+                    {toPersianDigits(cat.count)}
+                  </span>
+                </button>
+              );
+            })}
+            {managedCategories.length === 0 && !catalogReady && (
+              <span className="catalogue-category-placeholder" role="status">در حال دریافت دسته‌بندی‌ها…</span>
+            )}
+          </div>
+        </section>
+
+        {/* Search, Secondary Filters & View Controls Bar */}
+        <section className="catalogue-toolbar bg-white rounded-2xl border border-slate-200/80 p-4 shadow-sm space-y-3">
+          <div className="catalogue-toolbar-main flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+            {/* Search Input */}
+            <div className="catalogue-search-field relative flex-1">
+              <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                aria-label="جست‌وجو بر اساس نام، کد فنی، برند یا مشخصات"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                  const nextParams = new URLSearchParams(searchParams);
+                  if (e.target.value.trim()) nextParams.set("q", e.target.value);
+                  else nextParams.delete("q");
+                  setSearchParams(nextParams, { replace: true });
+                }}
+                placeholder="جستجوی کد فنی (مثلاً 8M-1200 یا AT-E045)، نام قطعه یا برند..."
+                className="w-full pr-10 pl-24 h-10 bg-slate-50 text-xs text-slate-800 rounded-xl border border-slate-200 focus:border-orange-500 focus:bg-white focus:outline-none transition-all shadow-inner"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => {
+                    setSearchQuery("");
+                    setCurrentPage(1);
+                    updateSearchParam("q", null);
+                  }}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-500 bg-slate-200 hover:bg-slate-300 px-2 py-0.5 rounded cursor-pointer"
+                >
+                  پاک کردن
+                </button>
+              )}
+            </div>
+
+            {/* Quick Accessible Filter Strip (Mobile horizontal pills + Desktop inline controls) */}
+            <div className="catalogue-quick-filters-bar">
+              {/* Sort Dropdown */}
+              <div className="catalogue-filter-control catalogue-filter-sort relative">
+                <select
+                  aria-label="مرتب‌سازی محصولات"
+                  value={sortBy}
+                  onChange={(e) => { setSortBy(e.target.value as any); setCurrentPage(1); }}
+                  className="h-10 px-3 bg-slate-50 text-xs font-bold text-slate-700 rounded-xl border border-slate-200 focus:border-orange-500 focus:bg-white focus:outline-none transition-all cursor-pointer"
+                >
+                  <option value="code_asc">⇅ مرتب‌سازی: کد فنی</option>
+                  <option value="name_asc">⇅ نام قطعه (الفبا)</option>
+                  <option value="rating_desc">⇅ بیشترین امتیاز</option>
+                  <option value="stock_desc">⇅ بیشترین موجودی</option>
+                </select>
+              </div>
+
+              {/* Brand Filter (Accessible on both Mobile & Desktop!) */}
+              <div className="catalogue-filter-control catalogue-filter-brand relative">
+                <select
+                  value={selectedBrand}
+                  aria-label="فیلتر برند سازنده"
+                  onChange={(e) => {
+                    setSelectedBrand(e.target.value);
+                    setCurrentPage(1);
+                    updateSearchParam("brand", e.target.value === "all" ? null : e.target.value);
+                  }}
+                  className="h-10 px-3 bg-slate-50 text-xs font-bold text-slate-700 rounded-xl border border-slate-200 focus:border-orange-500 focus:bg-white focus:outline-none transition-all cursor-pointer"
+                >
+                  <option value="all">
+                    برندها ({toPersianDigits(allBrands.length)})
+                  </option>
+                  {allBrands.map((b) => (
+                    <option key={b} value={b}>
+                      {b}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Category Quick Select on Mobile/Toolbar */}
+              <div className="catalogue-filter-control catalogue-filter-category relative">
+                <select
+                  value={selectedCategory}
+                  aria-label="انتخاب سریع دسته‌بندی"
+                  onChange={(e) => handleCategorySelect(e.target.value)}
+                  className="h-10 px-3 bg-slate-50 text-xs font-bold text-slate-700 rounded-xl border border-slate-200 focus:border-orange-500 focus:bg-white focus:outline-none transition-all cursor-pointer"
+                >
+                  <option value="all">همه دسته‌بندی‌ها</option>
+                  {managedCategories.map((cat) => (
+                    <option key={cat.slug} value={cat.slug}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <label className={`catalogue-desktop-stock-filter flex items-center gap-2 h-10 px-3 rounded-xl border cursor-pointer text-xs font-bold select-none transition-all ${inStockOnly ? "is-active" : ""}`}>
+                <input type="checkbox" checked={inStockOnly} onChange={(e) => { setInStockOnly(e.target.checked); setCurrentPage(1); updateSearchParam("stock", e.target.checked ? "1" : null); }} />
+                <span>فقط موجود</span>
+              </label>
+
+              {/* Official Catalogue Image Toggle */}
+              <label
+                className={`catalogue-desktop-image-filter flex items-center gap-2 h-10 px-3 rounded-xl border cursor-pointer text-xs font-bold select-none transition-all ${
+                  hasCatalogueImageFilter
+                    ? "bg-emerald-50 border-emerald-300 text-emerald-800 shadow-xs"
+                    : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={hasCatalogueImageFilter}
+                  onChange={(e) => {
+                    setHasCatalogueImageFilter(e.target.checked);
+                    setCurrentPage(1);
+                    updateSearchParam("image", e.target.checked ? "1" : null);
+                  }}
+                  className="rounded text-emerald-600 focus:ring-emerald-500"
+                />
+                <ImageIcon className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>
+                  دارای تصویر ({toPersianDigits(countWithImages)})
+                </span>
+              </label>
+
+              <button type="button" className="catalogue-mobile-filter-trigger" onClick={() => setMobileFiltersOpen(true)} aria-haspopup="dialog" aria-expanded={mobileFiltersOpen}>
+                <SlidersHorizontal className="w-4 h-4" /> فیلترها {activeFiltersCount > 0 && <span>{toPersianDigits(activeFiltersCount)}</span>}
+              </button>
+
+              {/* View Mode Toggle (Grid vs List) */}
+              <div className="catalogue-view-toggle flex items-center bg-slate-100 rounded-xl p-1 border border-slate-200">
+                <button
+                  onClick={() => setViewMode("grid")}
+                  aria-pressed={viewMode === "grid"}
+                  aria-label="نمایش شبکه‌ای"
+                  title="نمایش شبکه‌ای"
+                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                    viewMode === "grid"
+                      ? "bg-white text-orange-600 shadow-xs"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  <Grid3X3 className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setViewMode("list")}
+                  aria-pressed={viewMode === "list"}
+                  aria-label="نمایش لیستی"
+                  title="نمایش لیستی"
+                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                    viewMode === "list"
+                      ? "bg-white text-orange-600 shadow-xs"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  <List className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Reset Filters */}
+              {activeFiltersCount > 0 && (
+                <button
+                  onClick={handleResetFilters}
+                  title="بازنشانی فیلترها"
+                  className="catalogue-reset-btn flex items-center gap-1 h-10 px-3 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>پاکسازی</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {activeCategoryObj && (
+            <div className="pt-4 border-t border-slate-100">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <span className="text-xs font-bold text-[#484344]">
+                  زیرگروه‌های {activeCategoryObj.name}
+                </span>
+                <button
+                  type="button"
+                  className="text-xs text-[#E06518] font-bold"
+                  onClick={() => {
+                    const nextParams = new URLSearchParams(searchParams);
+                    nextParams.delete("sub");
+                    setSearchParams(nextParams);
+                    window.requestAnimationFrame(() => {
+                      scrollToSectionElement(resultsSectionRef.current, {
+                        behavior: "smooth",
+                      });
+                    });
+                  }}
+                >
+                  همه زیرگروه‌ها
+                </button>
+              </div>
+              <CategoryNavigation
+                key={activeCategoryObj.slug}
+                nodes={activeCategoryObj.children}
+                categorySlug={activeCategoryObj.slug}
+                selected={selectedSubcategory}
+                onSelect={(name) => {
+                  const nextParams = new URLSearchParams(searchParams);
+                  if (name === "all") nextParams.delete("sub");
+                  else nextParams.set("sub", name);
+                  setSearchParams(nextParams);
+                  window.requestAnimationFrame(() => {
+                    scrollToSectionElement(resultsSectionRef.current, {
+                      behavior: "smooth",
+                    });
+                  });
+                }}
+              />
+            </div>
+          )}
+        </section>
+
+        {mobileFiltersOpen && (
+          <div className="catalogue-filter-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setMobileFiltersOpen(false); }}>
+            <aside className="catalogue-filter-sheet" role="dialog" aria-modal="true" aria-labelledby="catalogue-filter-title">
+              <header>
+                <div><span>تنظیم نتایج</span><h2 id="catalogue-filter-title">فیلترهای محصولات</h2></div>
+                <button ref={mobileFilterCloseRef} type="button" onClick={() => setMobileFiltersOpen(false)} aria-label="بستن فیلترها"><X size={20}/></button>
+              </header>
+              <div className="catalogue-filter-sheet-body">
+                <label className="catalogue-sheet-select">برند سازنده
+                  <select value={selectedBrand} onChange={(event) => { setSelectedBrand(event.target.value); setCurrentPage(1); updateSearchParam("brand", event.target.value === "all" ? null : event.target.value); }}>
+                    <option value="all">همه برندها</option>
+                    {allBrands.map((brand) => <option key={brand} value={brand}>{brand}</option>)}
+                  </select>
+                </label>
+                <label className="catalogue-sheet-check"><span><strong>موجودی تأییدشده</strong><small>فقط کالاهایی که موجودی آن‌ها ثبت شده است</small></span><input type="checkbox" checked={inStockOnly} onChange={(event) => { setInStockOnly(event.target.checked); setCurrentPage(1); updateSearchParam("stock", event.target.checked ? "1" : null); }}/></label>
+                <label className="catalogue-sheet-check"><span><strong>دارای تصویر کاتالوگ</strong><small>{toPersianDigits(countWithImages)} خانواده دارای تصویر ثبت‌شده</small></span><input type="checkbox" checked={hasCatalogueImageFilter} onChange={(event) => { setHasCatalogueImageFilter(event.target.checked); setCurrentPage(1); updateSearchParam("image", event.target.checked ? "1" : null); }}/></label>
+              </div>
+              <footer>
+                <button type="button" className="catalogue-sheet-clear" onClick={clearAdvancedFilters}>پاک کردن فیلترها</button>
+                <button type="button" className="catalogue-sheet-apply" onClick={() => setMobileFiltersOpen(false)}>نمایش {toPersianDigits(filteredProducts.length)} نتیجه</button>
+              </footer>
+            </aside>
+          </div>
+        )}
+
+        {/* Active Filter Summary Chips */}
+        {activeFiltersCount > 0 && (
+          <div className="catalogue-active-chips flex flex-wrap items-center gap-2 px-1" aria-label="فیلترهای فعال">
+            {selectedCategory !== "all" && (
+              <button
+                type="button"
+                onClick={() => handleCategorySelect("all")}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 px-2.5 py-1 text-[11px] font-bold text-[#c65617] hover:bg-orange-100"
+              >
+                <span>دسته: {activeCategoryObj?.name || selectedCategory}</span>
+                <X className="w-3 h-3" />
+              </button>
+            )}
+            {selectedSubcategory !== "all" && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedSubcategory("all");
+                  updateSearchParam("sub", null);
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 px-2.5 py-1 text-[11px] font-bold text-[#c65617] hover:bg-orange-100"
+              >
+                <span>زیرگروه: {selectedSubcategory}</span>
+                <X className="w-3 h-3" />
+              </button>
+            )}
+            {selectedBrand !== "all" && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedBrand("all");
+                  updateSearchParam("brand", null);
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 px-2.5 py-1 text-[11px] font-bold text-[#c65617] hover:bg-orange-100"
+              >
+                <span>برند: {selectedBrand}</span>
+                <X className="w-3 h-3" />
+              </button>
+            )}
+            {inStockOnly && (
+              <button
+                type="button"
+                onClick={() => {
+                  setInStockOnly(false);
+                  updateSearchParam("stock", null);
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-800 hover:bg-emerald-100"
+              >
+                <span>فقط موجودی تأییدشده</span>
+                <X className="w-3 h-3" />
+              </button>
+            )}
+            {hasCatalogueImageFilter && (
+              <button
+                type="button"
+                onClick={() => {
+                  setHasCatalogueImageFilter(false);
+                  updateSearchParam("image", null);
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-800 hover:bg-emerald-100"
+              >
+                <span>دارای تصویر خانواده</span>
+                <X className="w-3 h-3" />
+              </button>
+            )}
+            {searchQuery.trim() && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery("");
+                  updateSearchParam("q", null);
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-700 hover:bg-slate-200"
+              >
+                <span>جستجو: «{searchQuery}»</span>
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Results Count & Active Status */}
+        <div
+          ref={resultsSectionRef}
+          id="catalog-products-results"
+          className="catalogue-results-count flex items-center justify-between text-xs text-slate-500 font-medium px-1 scroll-mt-24"
+        >
+          <div>
+            نمایش{" "}
+            <span className="font-bold text-slate-800 font-mono">
+              {toPersianDigits(paginatedProducts.length)}
+            </span>{" "}
+            از{" "}
+            <span className="font-bold text-orange-600 font-mono">
+              {toPersianDigits(filteredProducts.length)}
+            </span>{" "}
+            کالا
+            {selectedCategory !== "all" && (
+              <span>
+                {" "}
+                در دسته{" "}
+                <span className="font-bold text-slate-800">
+                  {activeCategoryObj?.name || selectedCategory}
+                </span>
+              </span>
+            )}
+          </div>
+          <div className="text-[11px] text-slate-400">
+            صفحه{" "}
+            <span className="font-bold font-mono">
+              {toPersianDigits(currentPage)}
+            </span>{" "}
+            از{" "}
+            <span className="font-bold font-mono">
+              {toPersianDigits(totalPages)}
+            </span>
+          </div>
+        </div>
+
+        {/* Products Display (Grid or List) */}
+        {!catalogReady && paginatedProducts.length === 0 ? (
+          <div className="catalogue-loading" role="status" aria-live="polite">
+            <span className="catalogue-loading-spinner" aria-hidden="true" />
+            <h3>در حال دریافت کاتالوگ واقعی صنعت پیش</h3>
+            <p>اطلاعات محصولات و مشخصات از پایگاه داده بارگذاری می‌شود.</p>
+          </div>
+        ) : paginatedProducts.length === 0 ? (
+          <div className="catalogue-empty bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-4 shadow-sm">
+            <div className="w-16 h-16 rounded-full bg-orange-50 text-orange-500 mx-auto flex items-center justify-center">
+              <Package className="w-8 h-8" />
+            </div>
+            <h3 className="text-base font-black text-slate-800">
+              هیچ محصولی با معیارهای انتخابی شما یافت نشد
+            </h3>
+            <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+              لطفاً فیلترها را تغییر داده یا واژه جستجوی دیگری را وارد کنید.
+              برای مشاهده همه محصولات دکمه زیر را لمس نمایید.
+            </p>
+            <button
+              onClick={handleResetFilters}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-orange-500 text-white text-xs font-bold hover:bg-orange-600 transition-colors shadow-sm cursor-pointer"
+            >
+              <RotateCcw className="w-4 h-4" />
+              <span>مشاهده تمام محصولات</span>
+            </button>
+          </div>
+        ) : (
+          <div
+            className={
+              viewMode === "grid" ? "store-product-grid catalogue-products-grid" : "store-product-list catalogue-products-list"
+            }
+          >
+            {paginatedProducts.map((product) => {
+              const isSelectedForCompare = compareCodes.includes(product.code);
+              return (
+                <div key={product.code} className="catalogue-product-item-wrap">
+                  <ProductCard
+                    product={product}
+                    detailPath={directSkuCodeSet.has(product.code) ? "/direct-product/" + encodeURIComponent(product.code) : undefined}
+                    disableSiteFallback={directSkuCodeSet.has(product.code)}
+                  />
+                  <button
+                    type="button"
+                    aria-pressed={isSelectedForCompare}
+                    onClick={() => {
+                      setCompareCodes((prev) => {
+                        if (prev.includes(product.code)) {
+                          return prev.filter((code) => code !== product.code);
+                        }
+                        if (prev.length >= 4) {
+                          return [...prev.slice(1), product.code];
+                        }
+                        return [...prev, product.code];
+                      });
+                    }}
+                    className={`catalogue-compare-toggle ${isSelectedForCompare ? "is-selected" : ""}`}
+                    title="افزودن به جدول مقایسه فنی"
+                  >
+                    {isSelectedForCompare ? <Check className="w-3.5 h-3.5" /> : <ArrowUpDown className="w-3.5 h-3.5" />}
+                    <span>{isSelectedForCompare ? "در لیست مقایسه" : "مقایسه فنی"}</span>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="catalogue-pagination bg-white rounded-2xl border border-slate-200/80 p-4 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="text-xs text-slate-500">
+              نمایش ردیف{" "}
+              <span className="font-mono font-bold">
+                {toPersianDigits((currentPage - 1) * PAGE_SIZE + 1)}
+              </span>{" "}
+              تا{" "}
+              <span className="font-mono font-bold">
+                {toPersianDigits(
+                  Math.min(currentPage * PAGE_SIZE, filteredProducts.length),
+                )}
+              </span>{" "}
+              از{" "}
+              <span className="font-mono font-bold text-orange-600">
+                {toPersianDigits(filteredProducts.length)}
+              </span>{" "}
+              قطعه
+            </div>
+
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => {
+                  setCurrentPage((prev) => Math.max(prev - 1, 1));
+                  window.scrollTo({ top: 400, behavior: "smooth" });
+                }}
+                disabled={currentPage === 1}
+                className="p-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:pointer-events-none transition-colors cursor-pointer"
+                title="صفحه قبلی"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter(
+                  (p) =>
+                    p === 1 ||
+                    p === totalPages ||
+                    Math.abs(p - currentPage) <= 2,
+                )
+                .map((p, idx, arr) => {
+                  const prevVal = arr[idx - 1];
+                  const showEllipsis = prevVal && p - prevVal > 1;
+
+                  return (
+                    <React.Fragment key={p}>
+                      {showEllipsis && (
+                        <span className="px-2 text-slate-400 text-xs">...</span>
+                      )}
+                      <button
+                        onClick={() => {
+                          setCurrentPage(p);
+                          window.scrollTo({ top: 400, behavior: "smooth" });
+                        }}
+                        className={`min-w-[36px] h-9 px-2 rounded-xl text-xs font-bold font-mono transition-all cursor-pointer ${
+                          currentPage === p
+                            ? "bg-orange-500 text-white shadow-sm"
+                            : "border border-slate-200 text-slate-700 hover:bg-slate-100"
+                        }`}
+                      >
+                        {toPersianDigits(p)}
+                      </button>
+                    </React.Fragment>
+                  );
+                })}
+
+              <button
+                onClick={() => {
+                  setCurrentPage((prev) => Math.min(prev + 1, totalPages));
+                  window.scrollTo({ top: 400, behavior: "smooth" });
+                }}
+                disabled={currentPage === totalPages}
+                className="p-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:pointer-events-none transition-colors cursor-pointer"
+                title="صفحه بعدی"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Floating Compare Dock */}
+      {compareCodes.length > 0 && (() => {
+        const comparedItems = compareCodes
+          .map((code) => displayCatalogProducts.find((p) => p.code === code))
+          .filter((item): item is Product => Boolean(item));
+        const specKeys = Array.from(
+          new Set(
+            comparedItems.flatMap((item) =>
+              (item.technicalSpecs || []).map((s) => s.key).filter(Boolean),
+            ),
+          ),
+        ).slice(0, 10);
+
+        return (
+          <>
+            <div className="catalogue-compare-dock" role="region" aria-label="نوار مقایسه فنی محصولات">
+              <div className="catalogue-compare-dock-info">
+                <strong>
+                  مقایسه فنی کالاها <span>{toPersianDigits(comparedItems.length)}/۴</span>
+                </strong>
+                <div className="catalogue-compare-dock-pills">
+                  {comparedItems.map((item) => (
+                    <span key={item.code}>
+                      <b dir="ltr">{item.code}</b>
+                      <button
+                        type="button"
+                        aria-label={`حذف ${item.code} از مقایسه`}
+                        onClick={() =>
+                          setCompareCodes((prev) => prev.filter((c) => c !== item.code))
+                        }
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div className="catalogue-compare-dock-actions">
+                <button
+                  type="button"
+                  className="catalogue-compare-clear"
+                  onClick={() => setCompareCodes([])}
+                >
+                  پاک کردن
+                </button>
+                <button
+                  type="button"
+                  className="catalogue-compare-open"
+                  onClick={() => setCompareModalOpen(true)}
+                >
+                  جدول مقایسه ({toPersianDigits(comparedItems.length)})
+                </button>
+              </div>
+            </div>
+
+            {compareModalOpen && (
+              <div
+                className="catalogue-compare-modal-backdrop"
+                onMouseDown={() => setCompareModalOpen(false)}
+              >
+                <section
+                  className="catalogue-compare-modal"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label="مقایسه مشخصات فنی محصولات"
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  <header>
+                    <div>
+                      <span>مقایسه مهندسی کاتالوگ صنعت پیش</span>
+                      <h2>مقایسه مشخصات فنی ({toPersianDigits(comparedItems.length)} محصول)</h2>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setCompareModalOpen(false)}
+                      aria-label="بستن پنجره مقایسه"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </header>
+                  <div className="catalogue-compare-table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>مشخصه فنی</th>
+                          {comparedItems.map((item) => (
+                            <th key={item.code}>
+                              <div className="catalogue-compare-th-card">
+                                <div className="catalogue-compare-th-img">
+                                  <ProductImage
+                                    src={item.images?.[0] || item.image}
+                                    alt={item.name}
+                                    thumbnail
+                                    loading="lazy"
+                                  />
+                                </div>
+                                <code dir="ltr">{item.code}</code>
+                                <Link to={`/product/${encodeURIComponent(item.code)}`}>
+                                  {item.name}
+                                </Link>
+                              </div>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <th>برند سازنده</th>
+                          {comparedItems.map((item) => (
+                            <td key={item.code}>{item.brand || "—"}</td>
+                          ))}
+                        </tr>
+                        <tr>
+                          <th>دسته‌بندی و زیرگروه</th>
+                          {comparedItems.map((item) => (
+                            <td key={item.code}>
+                              {item.categoryName} {item.subcategory ? `› ${item.subcategory}` : ""}
+                            </td>
+                          ))}
+                        </tr>
+                        <tr>
+                          <th>تعداد مدل / سایز (SKU)</th>
+                          {comparedItems.map((item) => (
+                            <td key={item.code}>
+                              {toPersianDigits(item.variants?.length || 1)} کد
+                            </td>
+                          ))}
+                        </tr>
+                        <tr>
+                          <th>وضعیت موجودی</th>
+                          {comparedItems.map((item) => (
+                            <td key={item.code}>
+                              {item.stockKnown && item.stock > 0 && !item.inquiryOnly
+                                ? `موجودی تأییدشده (${toPersianDigits(item.stock)})`
+                                : "استعلام موجودی و قیمت"}
+                            </td>
+                          ))}
+                        </tr>
+                        {specKeys.map((key) => (
+                          <tr key={key}>
+                            <th>{key}</th>
+                            {comparedItems.map((item) => {
+                              const found = (item.technicalSpecs || []).find(
+                                (s) => s.key === key,
+                              );
+                              return <td key={item.code}>{found?.value || "—"}</td>;
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              </div>
+            )}
+          </>
+        );
+      })()}
+    </div>
+  );
+};

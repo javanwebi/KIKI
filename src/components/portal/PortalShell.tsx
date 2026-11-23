@@ -1,0 +1,490 @@
+import { STORE_ASSETS } from "../../assets/images";
+import { SanatPishLogo } from "../common/BrandIdentity";
+import React, { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
+import {
+  Building2,
+  UserRound,
+  Home,
+  Package,
+  FileText,
+  MapPin,
+  Zap,
+  Gift,
+  ArrowUpLeft,
+  LogOut,
+  Menu,
+  X,
+  ShoppingBag,
+  ShoppingCart,
+  ChevronLeft,
+  Heart,
+  ClipboardList,
+  Bell,
+  Layers,
+  Award,
+  ArrowRight,
+} from "lucide-react";
+import type { Customer } from "../../types";
+import type {
+  PortalMenuItemConfig,
+  PortalBannerItem,
+  PortalUiTextsConfig,
+  PortalAppearanceConfig,
+  CustomerIndividualOverride,
+} from "../../services/portalContentService";
+import "./portal.css";
+import "./portal-storefront.css";
+import "./consumer-premium.css";
+import "./consumer-visual-parity.css";
+import "./consumer-reference-2026.css";
+import "./consumer-reference-parity-v3.css";
+
+const icons: Record<string, typeof Home> = {
+  saved_products: Heart,
+  purchase_list: ClipboardList,
+  overview: Home,
+  orders: Package,
+  orders_pricelist: Package,
+  receipts: FileText,
+  addresses: MapPin,
+  profile_addresses: Building2,
+  quick_buy: Zap,
+  club_rewards: Gift,
+};
+interface Props {
+  variant?: "consumer" | "high_volume";
+  user: Customer;
+  menus: PortalMenuItemConfig[];
+  activeTab: string;
+  onTab: (id: string) => void;
+  onLogout: () => void;
+  texts: PortalUiTextsConfig;
+  appearance: PortalAppearanceConfig;
+  discountRule?: CustomerIndividualOverride["customCartDiscountRule"];
+  showDiscovery: boolean;
+  labels: Record<string, string>;
+  metrics: { label: string; value: string; visible: boolean }[];
+  banners: PortalBannerItem[];
+  onBanner: (banner: PortalBannerItem) => void;
+  children: React.ReactNode;
+}
+export function PortalShell({
+  variant = "high_volume",
+  user,
+  menus,
+  activeTab,
+  onTab,
+  onLogout,
+  texts,
+  appearance,
+  labels,
+  discountRule,
+  showDiscovery,
+  metrics,
+  banners,
+  onBanner,
+  children,
+}: Props) {
+  const bannerImage = (b: PortalBannerItem) =>
+    b.backgroundImage ||
+    (b.id.startsWith("bnr-discover-") ? STORE_ASSETS.categories.pulleys : "");
+  const label = (s: string) => labels[s] ?? s;
+  const [more, setMore] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const moreButton = useRef<HTMLButtonElement>(null);
+  const dialog = useRef<HTMLDialogElement>(null);
+  const title = useRef<HTMLHeadingElement>(null);
+  const company = user.companyName || user.company || "حساب مشتری";
+  const surname =
+    user.lastName ||
+    user.fullName?.trim().split(/\s+/).slice(1).join(" ") ||
+    user.fullName ||
+    "حساب من";
+  // Make newly inserted tables responsive without rescanning all rows on
+  // every React render (search typing and order filters cause frequent renders).
+  useEffect(() => {
+    const root = ref.current;
+    if (!root) return;
+    let frame: number | null = null;
+    const labelRows = () => {
+      frame = null;
+      root.querySelectorAll("table").forEach((table) => {
+        const headings = [...table.querySelectorAll("thead th")].map((th) => th.textContent || "");
+        table.querySelectorAll("tbody tr").forEach((row) => {
+          [...row.children].forEach((cell, index) => {
+            if (cell.tagName === "TD" && cell.getAttribute("data-label") !== (headings[index] || "")) {
+              cell.setAttribute("data-label", headings[index] || "");
+            }
+          });
+        });
+      });
+    };
+    const schedule = () => {
+      if (frame === null) frame = window.requestAnimationFrame(labelRows);
+    };
+    const observer = new MutationObserver(schedule);
+    observer.observe(root, { childList: true, subtree: true });
+    schedule();
+    return () => {
+      observer.disconnect();
+      if (frame !== null) window.cancelAnimationFrame(frame);
+    };
+  }, []);
+  useEffect(() => {
+    if (more) dialog.current?.showModal();
+    else if (dialog.current?.open) dialog.current.close();
+  }, [more]);
+  const select = (id: string) => {
+    onTab(id);
+    setMore(false);
+    window.scrollTo({ top: 0, behavior: "instant" });
+    title.current?.focus({ preventScroll: true });
+  };
+  const navButton = (m: PortalMenuItemConfig, compact = false) => {
+    const Icon = compact && variant === "consumer"
+      ? (m.id === "orders" ? Layers : m.id === "club_rewards" ? Award : icons[m.id] || FileText)
+      : (icons[m.id] || FileText);
+    return (
+      <button
+        type="button"
+        key={m.id}
+        onClick={() => select(m.id)}
+        aria-current={activeTab === m.id ? "page" : undefined}
+        className={`portal-nav-item ${activeTab === m.id ? "is-active" : ""} ${compact ? "compact" : ""}`}
+      >
+        <Icon size={19} aria-hidden="true" />
+        <span>{compact && variant === "consumer" ? ({ overview: "پیشخوان", orders: "سفارش‌ها", quick_buy: "خرید سریع", club_rewards: "باشگاه" } as Record<string, string>)[m.id] || m.label : m.label}</span>
+        {!compact && <ChevronLeft size={14} />}
+      </button>
+    );
+  };
+  const mobileMenus = variant === "consumer"
+    ? ["overview", "orders", "quick_buy", "club_rewards"]
+        .map((id) => menus.find((m) => m.id === id))
+        .filter((m): m is PortalMenuItemConfig => Boolean(m))
+    : menus.slice(0, 3);
+  const consumerSectionTitles: Record<string, string> = {
+    orders: "سفارش‌ها و رهگیری مرسوله",
+    quick_buy: "خرید سریع قطعات",
+    club_rewards: "باشگاه مشتریان",
+    receipts: "فاکتورها و رسیدها",
+    addresses: "آدرس‌ها و اطلاعات تحویل",
+    saved_products: "محصولات نشان‌شده",
+    purchase_list: "لیست خرید چندکدی",
+  };
+  const consumerSectionDescriptions: Record<string, string> = {
+    orders: "پیگیری سفارش‌های ثبت‌شده، مرسوله‌ها و خرید مجدد",
+    quick_buy: "جستجوی دقیق با نام یا کد فنی قطعه",
+    club_rewards: "سطح عضویت، مسیر پیشرفت و مزایای منتشرشده",
+    receipts: "سوابق خرید، جزئیات پرداخت و چاپ فاکتور",
+    addresses: "اطلاعات گیرنده و نشانی‌های ارسال سفارش",
+    saved_products: "قطعات ذخیره‌شده برای دسترسی سریع‌تر",
+    purchase_list: "ورود و بررسی هم‌زمان کدهای فنی و تعداد",
+  };
+  return (
+    <div
+      className={`customer-portal ${variant === "consumer" ? "consumer-premium" : ""} accent-${texts.headerAccentTheme} density-${appearance.density} glass-${appearance.glass}`}
+      dir="rtl"
+      data-current-section={activeTab}
+      ref={ref}
+    >
+      <a className="portal-skip" href="#portal-content">
+        {label("رفتن به محتوای پنل")}
+      </a>
+      <aside className="portal-sidebar portal-glass">
+        <Link to="/" className="portal-brand" aria-label="صنعت پیش، بازگشت به فروشگاه">
+          <span className="portal-brand-logo-frame">
+            <SanatPishLogo className="portal-official-logo" alt="" />
+          </span>
+          <span className="portal-brand-description"><small>{label("همراه خرید صنعتی شما")}</small></span>
+        </Link>
+        <div className="portal-company">
+          {user.companyLogoUrl ? (
+            <img src={user.companyLogoUrl} alt={company} className="w-7 h-7 rounded-lg object-contain bg-white border border-slate-200 shrink-0" />
+          ) : (
+            <Building2 size={18} />
+          )}
+          <span>
+            {company}
+            <small>{user.username || user.phone}</small>
+          </span>
+        </div>
+        <nav aria-label="منوی پنل مشتری">{menus.map((m) => navButton(m))}</nav>
+        <div className="portal-sidebar-bottom">
+          <Link to="/products">
+            <ShoppingBag size={17} />
+            {label("بازگشت به فروشگاه")}
+            <ArrowUpLeft size={15} />
+          </Link>
+          <button type="button" onClick={onLogout}>
+            <LogOut size={17} />
+            {label("خروج از حساب")}
+          </button>
+        </div>
+      </aside>
+      <div className="portal-workspace">
+        <header className="portal-topbar portal-glass">
+          <Link to="/" className="portal-top-brand" aria-label="صنعت پیش، بازگشت به فروشگاه">
+            <span className="portal-top-logo-frame">
+              <SanatPishLogo className="portal-official-logo" alt="" priority />
+            </span>
+          </Link>
+          <div className="portal-breadcrumb">
+            {label("حساب من")}
+            <ChevronLeft size={14} />
+            <span>
+              {menus.find((m) => m.id === activeTab)?.label || "پیشخوان"}
+            </span>
+          </div>
+          <div className="portal-top-actions">
+            {variant === "consumer" && menus.some((m) => m.id === "overview") && (
+              <button type="button" className="consumer-notice-button" onClick={() => select("overview")} aria-label="مشاهده پیشخوان و اطلاعیه‌ها">
+                <Bell size={21} aria-hidden="true" />
+              </button>
+            )}
+            <Link to="/products" className="portal-search-link">
+              {label("جستجو در محصولات")}
+            </Link>
+            <Link
+              to="/cart"
+              className="portal-cart-link"
+              aria-label={label("سبد خرید من")}
+            >
+              <ShoppingCart size={19} />
+            </Link>
+            <div className="portal-person">
+              {user.avatarUrl ? (
+                <img src={user.avatarUrl} alt={surname} className="w-6 h-6 rounded-full object-cover border border-slate-200 shrink-0" />
+              ) : (
+                <UserRound size={18} />
+              )}
+              <span>{surname}</span>
+            </div>
+          </div>
+        </header>
+        <main id="portal-content" className="portal-content">
+          <div className="portal-heading">
+            <div>
+              <p>{variant === "consumer"
+                ? activeTab === "overview" ? `سلام، ${user.fullName || "مشتری عزیز"}` : "پنل مصرف‌کننده صنعت پیش"
+                : texts.heroWelcomePrefix}</p>
+              <h1 ref={title} tabIndex={-1}>
+                {variant === "consumer" ? activeTab === "overview" ? "پنل مصرف‌کننده صنعت پیش" : consumerSectionTitles[activeTab] || company : company}
+              </h1>
+              <p>{variant === "consumer" ? activeTab === "overview" ? "مدیریت سفارش‌ها، پیگیری مرسوله و خرید سریع قطعات" : consumerSectionDescriptions[activeTab] || texts.heroSubtitle : texts.heroSubtitle}</p>
+            </div>
+            {variant === "consumer" && ["saved_products", "purchase_list"].includes(activeTab) && (
+              <button type="button" className="consumer-reference-back" aria-label="بازگشت به پیشخوان" onClick={() => select("overview")}><ArrowRight size={21} /></button>
+            )}
+            <Link to="/products" className="portal-primary">
+              <ShoppingBag size={17} />
+              {texts.primaryCtaLabel}
+              <ArrowUpLeft size={16} />
+            </Link>
+          </div>
+          {variant === "consumer" && (activeTab === "overview" || activeTab === "receipts") && (
+            <nav className="consumer-shortcuts" aria-label="دسترسی سریع پنل مصرف‌کننده">
+              {menus.filter((m) => ["overview", "orders", "addresses"].includes(m.id)).map((m) => (
+                <button type="button" key={m.id} onClick={() => select(m.id)}
+                  aria-current={activeTab === m.id ? "page" : undefined}>
+                  {React.createElement(icons[m.id] || FileText, { size: 18, "aria-hidden": true })}
+                  <span>{({ overview: "پیشخوان", orders: "سفارش‌ها", addresses: "آدرس‌ها" } as Record<string, string>)[m.id] || m.label}</span>
+                </button>
+              ))}
+            </nav>
+          )}
+          {activeTab === "overview" && (
+            <>
+              {variant !== "consumer" && <div className="portal-metrics">
+                {metrics
+                  .filter((m) => m.visible)
+                  .map((m, i) => (
+                    <div className="portal-metric portal-glass" key={i}>
+                      <span className="portal-metric-icon">
+                        {React.createElement(
+                          [Package, FileText, ShoppingBag, Gift][i] || Package,
+                          { size: 19 },
+                        )}
+                      </span>
+                      <span>{m.label}</span>
+                      <strong>{m.value}</strong>
+                    </div>
+                  ))}
+              </div>}
+              {showDiscovery && banners.length === 0 && (
+                <div className="portal-discovery-grid">
+                  <section className="portal-campaign portal-glass">
+                    <div>
+                      <span className="portal-eyebrow">
+                        {label("برای ادامه تولید")}
+                      </span>
+                      <h2>{label("قطعه مناسب، با انتخاب دقیق‌تر")}</h2>
+                      <p>
+                        {label(
+                          "کد، سایز و مشخصات قطعات را ببینید؛ برای انتخاب همراه شما هستیم.",
+                        )}
+                      </p>
+                      <Link to="/products" className="portal-primary">
+                        {label("جستجو در محصولات")}
+                        <ArrowUpLeft size={16} />
+                      </Link>
+                    </div>
+                    <img
+                      src={STORE_ASSETS.categories.pulleys}
+                      alt=""
+                      loading="lazy"
+                    />
+                  </section>
+                  <section className="portal-quick-actions portal-glass">
+                    <h2>{label("دسترسی‌های کاربردی")}</h2>
+                    {menus
+                      .filter((m) => m.id !== "overview")
+                      .slice(0, 3)
+                      .map((m) => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => select(m.id)}
+                        >
+                          {React.createElement(icons[m.id] || FileText, {
+                            size: 18,
+                          })}
+                          <span>{m.label}</span>
+                          <ArrowUpLeft size={15} />
+                        </button>
+                      ))}
+                  </section>
+                </div>
+              )}
+              {banners.length > 0 && (
+                <section
+                  className="portal-campaigns"
+                  aria-label="پیشنهادها و رویدادها"
+                >
+                  {banners.map((b) => (
+                    <article
+                      key={b.id}
+                      className={`portal-campaign portal-glass campaign-${b.theme}`}
+                    >
+                      <div>
+                        <span className="portal-eyebrow">{b.badgeText}</span>
+                        <h2>{b.title}</h2>
+                        <p>{b.subtitle}</p>
+                        {b.minCartVolume && b.cartDiscountPercent ? (
+                          <p>
+                            {new Intl.NumberFormat("fa-IR").format(
+                              b.minCartVolume,
+                            )}{" "}
+                            تومان خرید؛{" "}
+                            {new Intl.NumberFormat("fa-IR").format(
+                              b.cartDiscountPercent,
+                            )}
+                            ٪ تخفیف سبد
+                          </p>
+                        ) : null}
+                        <button
+                          className="portal-primary"
+                          onClick={() => onBanner(b)}
+                          type="button"
+                        >
+                          {b.ctaText || "مشاهده"}
+                          <ArrowUpLeft size={16} />
+                        </button>
+                      </div>
+                      {bannerImage(b) && (
+                        <img src={bannerImage(b)} alt="" loading="lazy" />
+                      )}
+                    </article>
+                  ))}
+                </section>
+              )}
+              {discountRule && (
+                <section className="portal-campaign portal-glass mb-6">
+                  <div>
+                    <span className="portal-eyebrow">
+                      {label("پیشنهاد خرید شما")}
+                    </span>
+                    <h2>
+                      {new Intl.NumberFormat("fa-IR").format(
+                        discountRule.discountPercent,
+                      )}
+                      ٪ {label("تخفیف سبد خرید")}
+                    </h2>
+                    <p>
+                      {label("برای خرید از")}{" "}
+                      {new Intl.NumberFormat("fa-IR").format(
+                        discountRule.minVolume,
+                      )}{" "}
+                      {label("تومان")}
+                    </p>
+                    <p>{discountRule.description}</p>
+                    <Link to="/products" className="portal-primary">
+                      {texts.primaryCtaLabel}
+                      <ArrowUpLeft size={16} />
+                    </Link>
+                  </div>
+                </section>
+              )}
+            </>
+          )}
+          <div className="portal-panels">{children}</div>
+        </main>
+      </div>
+      <nav
+        className="portal-mobile-nav portal-glass"
+        aria-label="دسترسی سریع پنل"
+      >
+        {mobileMenus.map((m) => navButton(m, true))}
+        <button
+          ref={moreButton}
+          type="button"
+          onClick={() => setMore(true)}
+          className={`portal-nav-item compact ${!mobileMenus.some((m) => m.id === activeTab) ? "is-active" : ""}`}
+          aria-haspopup="dialog"
+          aria-expanded={more}
+        >
+          {variant === "consumer" ? <UserRound size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
+          <span>{variant === "consumer" ? label("حساب من") : label("همه بخش‌ها")}</span>
+        </button>
+      </nav>
+      <dialog
+        ref={dialog}
+        className="portal-menu-dialog"
+        onCancel={() => setMore(false)}
+        onClose={() => {
+          setMore(false);
+          moreButton.current?.focus();
+        }}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) setMore(false);
+        }}
+        aria-labelledby="portal-menu-title"
+      >
+        <div className="portal-sheet-heading">
+          <h2 id="portal-menu-title">{label("بخش‌های حساب من")}</h2>
+          <button
+            type="button"
+            autoFocus
+            onClick={() => setMore(false)}
+            aria-label="بستن منو"
+          >
+            <X size={22} />
+          </button>
+        </div>
+        <p className="portal-sheet-company">{company}</p>
+        <nav aria-label="تمام بخش‌های پنل">
+          {menus.map((m) => navButton(m))}
+        </nav>
+        <Link to="/products" className="portal-store-link">
+          {label("بازگشت به فروشگاه")}
+          <ArrowUpLeft size={17} />
+        </Link>
+        <button className="portal-logout" type="button" onClick={onLogout}>
+          <LogOut size={18} />
+          {label("خروج از حساب")}
+        </button>
+      </dialog>
+    </div>
+  );
+}
